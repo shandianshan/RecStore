@@ -17,6 +17,9 @@ docs/latex
 *.out
 *__pycache__*
 third_party/grpc-install/
+third_party/brpc-install/
+third_party/protobuf-install/
+third_party/brpc/
 datasets/
 *qdrep
 .cache

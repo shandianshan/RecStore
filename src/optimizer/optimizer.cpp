@@ -2,7 +2,8 @@
 #include <cstring>
 
 void SGD::Init(const std::vector<std::string> table_name,
-               const EmbeddingTableConfig& config) {
+               const EmbeddingTableConfig& config,
+               BaseKV* base_kv) {
   for (const auto& name : table_name) {
   }
 }
@@ -53,7 +54,8 @@ void SGD::Update(std::string table,
 }
 
 void AdaGrad::Init(const std::vector<std::string> table_name,
-                   const EmbeddingTableConfig& config) {
+                   const EmbeddingTableConfig& config,
+                   BaseKV* base_kv) {
   for (const auto& name : table_name) {
   }
 }
@@ -144,7 +146,8 @@ void AdaGrad::Update(std::string table,
 }
 
 void RowWiseAdaGrad::Init(const std::vector<std::string> table_name,
-                          const EmbeddingTableConfig& config) {
+                          const EmbeddingTableConfig& config,
+                          BaseKV* base_kv) {
   for (const auto& name : table_name) {
   }
 }

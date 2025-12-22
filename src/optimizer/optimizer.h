@@ -22,7 +22,8 @@ public:
   }
 
   virtual void Init(const std::vector<std::string> table_name,
-                    const EmbeddingTableConfig& config) = 0;
+                    const EmbeddingTableConfig& config,
+                    BaseKV* base_kv) = 0;
 
   virtual void Update(std::string table,
                       const std::vector<uint64_t>& keys,
@@ -38,7 +39,8 @@ public:
   explicit SGD(float lr = 0.01) : learning_rate_(lr) {}
 
   void Init(const std::vector<std::string> table_name,
-            const EmbeddingTableConfig& config) override;
+            const EmbeddingTableConfig& config,
+            BaseKV* base_kv) override;
   void Update(std::string table,
               const std::vector<uint64_t>& keys,
               const std::vector<std::vector<float>>& grads,
@@ -55,7 +57,8 @@ public:
       : learning_rate_(lr), epsilon_(epsilon) {}
 
   void Init(const std::vector<std::string> table_name,
-            const EmbeddingTableConfig& config) override;
+            const EmbeddingTableConfig& config,
+            BaseKV* base_kv) override;
   void Update(std::string table,
               const std::vector<uint64_t>& keys,
               const std::vector<std::vector<float>>& grads,
@@ -72,7 +75,8 @@ public:
       : learning_rate_(lr), epsilon_(epsilon) {}
 
   void Init(const std::vector<std::string> table_name,
-            const EmbeddingTableConfig& config) override;
+            const EmbeddingTableConfig& config,
+            BaseKV* base_kv) override;
   void Update(std::string table,
               const std::vector<uint64_t>& keys,
               const std::vector<std::vector<float>>& grads,

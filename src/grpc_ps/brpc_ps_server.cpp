@@ -132,10 +132,10 @@ void BRPCParameterServiceImpl::Command(
     google::protobuf::Closure* done) {
   brpc::ClosureGuard done_guard(done);
 
-  if (request->command() == PSCommand::CLEAR_PS) {
+  if (request->command() == recstoreps_brpc::PSCommand::CLEAR_PS) {
     LOG(WARNING) << "[PS Command] Clear All";
     cache_ps_->Clear();
-  } else if (request->command() == PSCommand::RELOAD_PS) {
+  } else if (request->command() == recstoreps_brpc::PSCommand::RELOAD_PS) {
     LOG(WARNING) << "[PS Command] Reload PS";
     CHECK_NE(request->arg1().size(), 0);
     CHECK_NE(request->arg2().size(), 0);

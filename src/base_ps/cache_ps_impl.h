@@ -15,6 +15,7 @@
 #include "storage/kv_engine/base_kv.h"
 #include "storage/kv_engine/engine_factory.h"
 #include "storage/kv_engine/engine_selector.h"
+#include "optimizer/optimizer.h"
 using boost::coroutines2::coroutine;
 
 static const int KEY_CNT = 12543670;
@@ -135,7 +136,37 @@ public:
     return true;
   }
 
+  /// optimizer interface
+
+  bool InitTable(const std::string& table_name,
+                 uint64_t num_embeddings,
+                 uint64_t embedding_dim) {
+    // TODO: optimizer type from config
+    optimizer_ = std::make_unique<SGD>(0.01);
+    EmbeddingTableConfig config{num_embeddings, embedding_dim};
+    // base_kv_ should be initialized before this call
+    optimizer_->Init({table_name}, config, base_kv_.get());
+    return true;
+  }
+
+  bool UpdateParameter(const std::string& table_name,
+                       const ParameterCompressReader* reader,
+                       const std::vector<std::vector<float>>* grads,
+                       unsigned tid) {
+    std::vector<uint64_t> keys_vec;
+    // std::vector<base::ConstArray<float>> values;
+    for (int i = 0; i < reader->item_size(); i++) {
+      keys_vec.emplace_back(reader->item(i)->key);
+      // values.emplace_back(
+      // (float*)reader->item(i)->data(), reader->item(i)->dim);
+    }
+    // base::ConstArray<uint64_t> keys(keys_vec);
+    // base_kv_->BatchPut(sink, keys, &values, tid);
+    optimizer_->Update(table_name, keys_vec, *grads, tid);
+  }
+
 private:
   std::unique_ptr<BaseKV> base_kv_;
+  std::unique_ptr<Optimizer> optimizer_;
   std::atomic<bool> stopFlag_{false};
 };

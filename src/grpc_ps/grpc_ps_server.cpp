@@ -331,6 +331,7 @@ FACTORY_REGISTER(BaseParameterServer, GRPCParameterServer, GRPCParameterServer);
 
 } // namespace recstore
 
+#ifndef RECSTORE_NO_SERVER_MAIN
 int main(int argc, char** argv) {
   folly::Init(&argc, &argv);
   xmh::Reporter::StartReportThread(2000);
@@ -343,3 +344,4 @@ int main(int argc, char** argv) {
   ps.Run();
   return 0;
 }
+#endif

@@ -145,7 +145,7 @@ public:
       // TODO: optimizer type from config
       optimizer_ = std::make_unique<SGD>(0.01);
     }
-    
+
     EmbeddingTableConfig config{num_embeddings, embedding_dim};
     optimizer_->Init({table_name}, config, base_kv_.get());
     return true;

@@ -153,6 +153,11 @@ public:
                        const ParameterCompressReader* reader,
                        const std::vector<std::vector<float>>* grads,
                        unsigned tid) {
+    if (!optimizer_) {
+      LOG(ERROR) << "Optimizer not initialized. Please call InitTable first.";
+      return false;
+    }
+
     std::vector<uint64_t> keys_vec;
     // std::vector<base::ConstArray<float>> values;
     for (int i = 0; i < reader->item_size(); i++) {
@@ -163,6 +168,7 @@ public:
     // base::ConstArray<uint64_t> keys(keys_vec);
     // base_kv_->BatchPut(sink, keys, &values, tid);
     optimizer_->Update(table_name, keys_vec, *grads, tid);
+    return true;
   }
 
 private:

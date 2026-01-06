@@ -182,12 +182,13 @@ private:
         grads_vector.push_back(std::move(grad));
       }
 
-      cache_ps_->UpdateParameter(table_name, reader, &grads_vector, 0);
+      bool success =
+          cache_ps_->UpdateParameter(table_name, reader, &grads_vector, 0);
 
       FB_LOG_EVERY_MS(INFO, 2000)
           << "UpdateParameter: table=" << table_name << ", keys=" << size;
 
-      reply->set_success(true);
+      reply->set_success(success);
     } catch (const std::exception& e) {
       LOG(ERROR) << "UpdateParameter error: " << e.what();
       reply->set_success(false);

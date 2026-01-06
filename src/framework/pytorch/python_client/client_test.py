@@ -64,6 +64,13 @@ update_keys = torch.tensor([1001, 1002], dtype=torch.int64)
 grads = torch.ones(2, embedding_dim, dtype=torch.float32)
 client.emb_update_table("default", update_keys, grads)
 print("emb_update_table call succeeded (no value assertion).")
+lr=0.01
+updated_values = client.emb_read(update_keys, embedding_dim)
+expected_updated = values_to_write[:2] - (lr * grads)
+print(f"Updated values(first 3): {updated_values.tolist()[:3]}")
+print(f"Expected updated values(first 3): {expected_updated.tolist()[:3]}")
+assert torch.allclose(updated_values, expected_updated), "Table-aware update values mismatch"
+print("Table-aware update verified successfully.")
 exit(0)
 
 # print("\n--- Test 3: Update Operation ---")

@@ -49,6 +49,7 @@ target_link_libraries(grpc_ps_server PUBLIC
     protobuf::libprotobuf
     stdc++fs
     kv_engine
+    sparse_tensor
     gflags
     glog
     TBB::tbb

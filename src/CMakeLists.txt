@@ -15,7 +15,7 @@ add_subdirectory(memory)
 add_subdirectory(storage)
 add_subdirectory(optimizer)
 
-add_subdirectory(kg)
+# add_subdirectory(kg)
 add_subdirectory(test)
 
 add_subdirectory(small_tests)

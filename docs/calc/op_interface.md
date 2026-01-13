@@ -43,8 +43,11 @@ virtual void EmbWrite(const RecTensor& keys, const RecTensor& values) = 0;
 | EmbWrite | 批量写入嵌入向量 | 初始化、检查点加载 |
 
 **参数**
-- `keys` - uint64 张量，形状 [N]，嵌入 ID
-- `values` - float32 张量，形状 [N, D]，嵌入向量
+
+| 参数    | 类型           | 形状      | 说明         |
+|---------|----------------|-----------|--------------|
+| keys    | uint64 张量    | [N]       | 嵌入 ID      |
+| values  | float32 张量   | [N, D]    | 嵌入向量     |
 
 ### 异步预取
 
@@ -65,14 +68,14 @@ virtual void GetPretchResult(uint64_t prefetch_id,
 
 **工作流程**
 
-| 步骤 | 代码位置 | 代码/操作 | 说明 |
-|------|---------|----------|------|
-| 1 | `src/framework/op.h:CommonOp` | `pid = EmbPrefetch(keys, dummy_values)` | 发起异步预取 |
-| 2 | 同上 | 后台执行 | 不阻塞当前线程 |
-| 3 | 同上 | `while not IsPrefetchDone(pid): continue` | 轮询检查状态 |
-| 4 | 同上 | `WaitForPrefetch(pid)` | 阻塞等待完成 |
-| 5 | 同上 | `GetPretchResult(pid, &results)` | 获取预取结果 |
-| 6 | 同上 | 返回 `vector<vector<float>>` | 返回向量数据 |
+| 步骤 | 代码/操作 | 说明 |
+|------|----------|------|
+| 1 | `pid = EmbPrefetch(keys, dummy_values)` | 发起异步预取 |
+| 2 | 后台执行 | 不阻塞当前线程 |
+| 3 | `while not IsPrefetchDone(pid): continue` | 轮询检查状态 |
+| 4 | `WaitForPrefetch(pid)` | 阻塞等待完成 |
+| 5 | `GetPretchResult(pid, &results)` | 获取预取结果 |
+| 6 | 返回 `vector<vector<float>>` | 返回向量数据 |
 
 ### 异步写入
 
@@ -120,10 +123,10 @@ virtual bool EmbExists(const RecTensor& keys) = 0;
 virtual void EmbDelete(const RecTensor& keys) = 0;
 ```
 
-| 方法 | 说明 | 优先级 |
-|------|------|-------|
-| EmbExists | 检查 ID 是否存在 | 低 (可选) **(未实现)** |
-| EmbDelete | 删除指定 ID 的嵌入 | 低 (可选) **(未实现)** |
+| 方法 | 说明 |
+|------|------|
+| EmbExists | 检查 ID 是否存在 |
+| EmbDelete | 删除指定 ID 的嵌入 |
 
 ### 持久化
 
@@ -132,10 +135,10 @@ virtual void SaveToFile(const std::string& path) = 0;
 virtual void LoadFromFile(const std::string& path) = 0;
 ```
 
-| 方法 | 说明 | 优先级 |
-|------|------|-------|
-| SaveToFile | 将嵌入检查点保存到文件 | 低 (可选) **(未实现)** |
-| LoadFromFile | 从文件加载嵌入 | 低 (可选) **(未实现)** |
+| 方法 | 说明 |
+|------|------|
+| SaveToFile | 将嵌入检查点保存到文件 |
+| LoadFromFile | 从文件加载嵌入 |
 
 ## KVClientOp 实现
 
@@ -181,5 +184,6 @@ std::shared_ptr<CommonOp> op = GetKVClientOp();
 ## 线程安全
 
 `KVClientOp` 可在多线程环境下安全使用：
+
 - 每个线程可独立调用接口
 - 参数服务器客户端内部处理线程同步

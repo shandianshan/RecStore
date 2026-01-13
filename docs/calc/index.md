@@ -87,18 +87,7 @@ kv_client.init_data(
 
 ```python
 emb_configs = [
-    {
-        "name": "user_emb",
-        "num_embeddings": 1000000,
-        "embedding_dim": 128,
-        "feature_names": ["user_id"],
-    },
-    {
-        "name": "item_emb",
-        "num_embeddings": 500000,
-        "embedding_dim": 128,
-        "feature_names": ["item_id"],
-    }
+    # ...
 ]
 
 emb_bag = RecStoreEmbeddingBagCollection(

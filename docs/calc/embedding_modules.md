@@ -75,13 +75,7 @@ emb_bag = RecStoreEmbeddingBagCollection(
 global_id = original_id + (table_idx << fusion_k)
 ```
 
-例如：
-- fusion_k=30, table_idx=0: ID 无偏移
-- fusion_k=30, table_idx=1: ID += 2^30 (约 10 亿)
-
-好处：
-- 后端去重后请求数量大幅减少
-- 减少网络通信量
+用于合并请求。
 
 ### 反向传播
 
@@ -89,15 +83,15 @@ global_id = original_id + (table_idx << fusion_k)
 
 **梯度处理流程**
 
-| 步骤 | 代码位置 | 代码/操作 | 说明 |
-|------|---------|----------|------|
-| 1 | `src/python/pytorch/torchrec/EmbeddingBag.py:_RecStoreEBCFunction.backward` | 接收 `grad_output` | 上层梯度 |
-| 2 | 同上 | `for i, key in enumerate(feature_keys)` | 遍历每个特征 |
-| 3 | 同上 | `offsets = torch.cat([torch.tensor([0]), torch.cumsum(lengths_cpu, 0)])` | 计算 bag 边界 |
-| 4 | 同上 | `ids_to_update = values_cpu[start:end]` | 提取该 bag 的 ID |
-| 5 | 同上 | `grad_for_bag = grad_output_reshaped[sample_idx, i]` | 提取该 bag 的梯度 |
-| 6 | 同上 | `module._trace.append((config_name, ids, grads))` | 追踪梯度 |
-| 7 | 同上 | `return None, None, None, None` | 不计算输入梯度 |
+| 步骤 | 代码/操作 | 说明 |
+|------|----------|------|
+| 1 | 接收 `grad_output` | 上层梯度 |
+| 2 | `for i, key in enumerate(feature_keys)` | 遍历每个特征 |
+| 3 | `offsets = torch.cat([torch.tensor([0]), torch.cumsum(lengths_cpu, 0)])` | 计算 bag 边界 |
+| 4 | `ids_to_update = values_cpu[start:end]` | 提取该 bag 的 ID |
+| 5 | `grad_for_bag = grad_output_reshaped[sample_idx, i]` | 提取该 bag 的梯度 |
+| 6 | `module._trace.append((config_name, ids, grads))` | 追踪梯度 |
+| 7 | `return None, None, None, None` | 不计算输入梯度 |
 
 **梯度追踪**
 
@@ -107,7 +101,8 @@ self._trace.append(
 )
 ```
 
-外部优化器需处理 _trace 列表：
+外部优化器需处理 `_trace` 列表：
+
 ```python
 for table_name, ids, grads in module._trace:
     client.update(table_name, ids, grads)
@@ -122,24 +117,25 @@ module.reset_trace()
 def issue_fused_prefetch(
     features: KeyedJaggedTensor,
     record_handle: bool = True
-) → int | Tuple:
+) -> int | Tuple:
 ```
 
 计算融合 ID 并异步预取
 
-**工作流程**
+**工作流程**（`src/python/pytorch/torchrec/EmbeddingBag.py:issue_fused_prefetch`）
 
-| 步骤 | 代码位置 | 代码/操作 | 说明 |
-|------|---------|----------|------|
-| 1 | `src/python/pytorch/torchrec/EmbeddingBag.py:issue_fused_prefetch` | `for key in keys_in_batch` | 遍历批次中的特征 |
-| 2 | 同上 | `values = kjt_per_feature.values()` | 获取特征值 |
-| 3 | 同上 | `prefix = (table_idx << fusion_k)` | 计算融合前缀 |
-| 4 | 同上 | `fused_values = values + prefix` | 融合成全局 ID |
-| 5 | 同上 | `unique_ids, inverse = torch.unique(fused_values_all, return_inverse=True)` | ID 去重 |
-| 6 | 同上 | `handle = self.kv_client.prefetch(unique_ids)` | 异步预取 |
-| 7 | 同上 | 返回 `(handle, num_ids, issue_ts, ...)` 或仅 handle | 返回预取信息 |
+| 步骤 | 代码/操作 | 说明 |
+|------|----------|------|
+| 1 | `for key in keys_in_batch` | 遍历批次中的特征 |
+| 2 | `values = kjt_per_feature.values()` | 获取特征值 |
+| 3 | `prefix = (table_idx << fusion_k)` | 计算融合前缀 |
+| 4 | `fused_values = values + prefix` | 融合成全局 ID |
+| 5 | `unique_ids, inverse = torch.unique(fused_values_all, return_inverse=True)` | ID 去重 |
+| 6 | `handle = self.kv_client.prefetch(unique_ids)` | 异步预取 |
+| 7 | 返回 `(handle, num_ids, issue_ts, ...)` 或仅 handle | 返回预取信息 |
 
 **返回值**
+
 - record_handle=True: 返回 prefetch_id
 - record_handle=False: 返回 (prefetch_id, num_ids, issue_ts, fused_ids, inverse)
 
@@ -217,17 +213,17 @@ emb = DistEmbedding(
 
 自定义 Function 的 backward
 
-**梯度处理**
+**梯度处理**（`src/python/pytorch/recstore/DistEmb.py:_DistEmbFunction.backward`）
 
-| 步骤 | 代码位置 | 代码/操作 | 说明 |
-|------|---------|----------|------|
-| 1 | `src/python/pytorch/recstore/DistEmb.py:_DistEmbFunction.backward` | `ids, = ctx.saved_tensors` | 恢复保存的 ID |
-| 2 | 同上 | `module_instance = ctx.module_instance` | 获取模块实例 |
-| 3 | 同上 | `unique_ids, inverse = torch.unique(ids_cpu, return_inverse=True)` | ID 去重并保留逆映射 |
-| 4 | 同上 | `grad_sum = torch.zeros((unique_ids.size(0), grad_cpu.size(1)))` | 创建聚合梯度 |
-| 5 | 同上 | `grad_sum.index_add_(0, inverse, grad_cpu)` | 相同 ID 梯度累加 |
-| 6 | 同上 | `module_instance._trace.append((unique_ids, grad_sum))` | 追踪聚合梯度 |
-| 7 | 同上 | `return None, None, None, None` | 返回（不计算输入梯度） |
+| 步骤 | 代码/操作 | 说明 |
+|------|----------|------|
+| 1 | `ids, = ctx.saved_tensors` | 恢复保存的 ID |
+| 2 | `module_instance = ctx.module_instance` | 获取模块实例 |
+| 3 | `unique_ids, inverse = torch.unique(ids_cpu, return_inverse=True)` | ID 去重并保留逆映射 |
+| 4 | `grad_sum = torch.zeros((unique_ids.size(0), grad_cpu.size(1)))` | 创建聚合梯度 |
+| 5 | `grad_sum.index_add_(0, inverse, grad_cpu)` | 相同 ID 梯度累加 |
+| 6 | `module_instance._trace.append((unique_ids, grad_sum))` | 追踪聚合梯度 |
+| 7 | `return None, None, None, None` | 返回（不计算输入梯度） |
 
 ### DistTensor
 
@@ -246,6 +242,7 @@ def __init__(
 ```
 
 **特点**
+
 - 单个全局张量视图
 - 支持 __getitem__ (查询) 和 __setitem__ (更新)
 - 自动初始化与清理

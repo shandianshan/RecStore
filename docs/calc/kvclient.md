@@ -18,9 +18,10 @@ client = RecStoreClient(library_path="/path/to/lib_recstore_ops.so", role="defau
 | role | 客户端角色，默认 "default" |
 
 **特点**
-- 单例模式确保全局只有一个客户端实例
-- 重复初始化时直接返回已有实例
-- 支持多个角色的客户端区分
+
+* 单例模式确保全局只有一个客户端实例
+* 重复初始化时直接返回已有实例
+* 支持多个角色的客户端区分
 
 ## 数据管理 API
 
@@ -58,16 +59,6 @@ def init_data(
 | 4 | `initial_data = init_func(shape, dtype) if init_func else torch.zeros(shape)` | 生成初始数据 |
 | 5 | `all_keys = torch.arange(shape[0]) + base_offset` | 生成 ID |
 | 6 | `self.ops.emb_write(all_keys, initial_data)` | 初始数据写入 |
-
-**示例**
-```python
-client.init_data(
-    name="user_emb",
-    shape=(1000000, 128),
-    dtype=torch.float32,
-    init_func=lambda shape, dtype: torch.randn(shape, dtype=dtype) * 0.01
-)
-```
 
 ### 删除嵌入表
 

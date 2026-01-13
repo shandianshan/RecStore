@@ -32,6 +32,11 @@ def extract_code_paths_from_docs(docs_dir='docs'):
             if path.startswith('src/'):
                 paths.add(path)
         
+        for match in re.finditer(r'\[([^\]]+)\]\((\.\./)?([a-zA-Z0-9_\-./]+\.[a-zA-Z0-9]+)\)', content):
+            path = match.group(3)
+            if path.startswith('src/'):
+                paths.add(path)
+        
         for path in paths:
             code_to_docs[path].add(str(md_file.relative_to(Path(docs_dir).parent)))
     

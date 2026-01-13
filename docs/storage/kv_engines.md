@@ -142,16 +142,6 @@ CCEH (Cacheline-Conscious Extendible Hash) 全部使用 SSD 存储。
 - `0`: 逐个 Get
 - `1`: 使用 BatchGet 预取
 
-## 性能特征
-
-| 引擎 | 读延迟 | 写延迟 | 容量 | 持久化 |
-|------|-------|-------|------|-------|
-| Map | 低 | 低 | 受限于 DRAM | 否 |
-| ExtendibleHash | 低 | 中 | 大 | 是 |
-| CCEH | 中 | 中 | 大 | 是 |
-| Hybrid | 低-中 | 中 | 超大 | 是 |
-| PetKV | 低-中 | 低-中 | 大 | 是 |
-
 ## 线程安全
 
 各引擎的线程安全实现：

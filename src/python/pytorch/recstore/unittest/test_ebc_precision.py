@@ -6,7 +6,7 @@ from torchrec import EmbeddingBagCollection
 from torchrec.sparse.jagged_tensor import KeyedJaggedTensor
 from torchrec.modules.embedding_configs import EmbeddingBagConfig
 
-RECSTORE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../src'))
+RECSTORE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../..'))
 if RECSTORE_PATH not in sys.path:
     sys.path.insert(0, RECSTORE_PATH)
 

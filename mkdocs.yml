@@ -94,12 +94,13 @@ nav:
       - KV 引擎实现: storage/kv_engines.md
       - 内存管理: storage/memory.md
   - 开发:
-    - 免配置运行: dev/zero_config_run.md
     - 性能分析: dev/performance.md
+    - 免配置运行: dev/zero_config_run.md
     - 功能实现:
       - 添加算子: dev/feature/add_operator.md
     - 测试文档:
       - 概览: dev/testing.md
+      - 辅助工具: dev/tests/tools.md
       - Python客户端: dev/tests/client_test.md
       - EBC精度对齐: dev/tests/ebc_precision.md
       - DistEmbedding: dev/tests/dist_emb_test.md

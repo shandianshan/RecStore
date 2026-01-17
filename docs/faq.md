@@ -86,3 +86,8 @@
     * [build error: small_vector.h:642:47: error: ‘malloc_usable_size’ was not declared in this scope](https://github.com/facebook/hhvm/issues/4908)
     * [Build wangle encountered error: error: use of undeclared identifier 'malloc_usable_size' ](https://github.com/facebook/wangle/issues/65)
     * [MB-33900: Use folly Malloc.h for detecting malloc_usable_size](https://review.couchbase.com/c/platform/+/138406)
+
+## Runtime Errors
+
+??? failure "E20260117 01:49:19.761556 970021 engine_extendible_hash.h:88] shm malloc failed (OOM?), key: 93068 size: 512"
+    配置文件中 `cache_ps.base_kv_config.capacity` 设置过小，导致无法分配足够的共享内存，可以尝试调大该值。

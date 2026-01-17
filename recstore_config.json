@@ -21,7 +21,7 @@
             "capacity": 1000000,
             "value_size": 512,
             "value_type": "DRAM",
-            "index_type" : "DRAM",      
+            "index_type": "DRAM",
             "value_memory_management": "PersistLoopShmMalloc"
         }
     },

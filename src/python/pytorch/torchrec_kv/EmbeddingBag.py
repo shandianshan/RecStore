@@ -394,8 +394,8 @@ class RecStoreEmbeddingBagCollection(torch.nn.Module):
                 unique_ids, inverse = torch.unique(ids_cpu, return_inverse=True)
                 grad_sum = torch.zeros((unique_ids.size(0), grad_cpu.size(1)), dtype=grad_cpu.dtype)
                 grad_sum.index_add_(0, inverse, grad_cpu)
-                print(f"[EBC] Fused grad hook: updating {unique_ids.size(0)} unique IDs for config '{master_name}'")
-                print(f"[WARNING] Direct push is disabled in enabled EmbUpdate Operation. --- IGNORE ---")
+                # print(f"[EBC] Fused grad hook: updating {unique_ids.size(0)} unique IDs for config '{master_name}'")
+                # print(f"[WARNING] Direct push is disabled in enabled EmbUpdate Operation. --- IGNORE ---")
                 # current = self.kv_client.pull(name=master_name, ids=unique_ids)
                 # updated = current - self._lr * grad_sum
                 # self.kv_client.push(name=master_name, ids=unique_ids, data=updated)

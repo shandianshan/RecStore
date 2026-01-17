@@ -181,30 +181,6 @@ ToRecTensor(const torch::Tensor& tensor, base::DataType dtype)
 | 提取形状 | 遍历 `tensor.dim()` 获取各维大小 |
 | 指定数据类型 | UINT64 (keys) 或 FLOAT32 (values) |
 
-## 日志系统
-
-使用环境变量控制日志级别：
-
-```bash
-export RECSTORE_LOG_LEVEL=3  # DEBUG
-export RECSTORE_LOG_LEVEL=2  # INFO (默认)
-export RECSTORE_LOG_LEVEL=1  # WARNING
-export RECSTORE_LOG_LEVEL=0  # ERROR
-```
-
-**日志宏**
-```cpp
-RECSTORE_LOG(level, message)
-```
-
-??? example "输出示例"
-    ```text
-    [DEBUG][op_torch] emb_read_torch: embedding_dim=128
-    [DEBUG][op_torch] emb_read_torch: keys start with: 8204, 8204, 29425, 36451, 26530, 41875, 40039, 1802, 20861, 1802, 
-    [INFO] emb_read_torch called: keys shape=[26624], dtype=long int, embedding_dim=128
-    [DEBUG][op_torch] emb_read_torch: values shape=[26624, 128], dtype=float, data_ptr=0x555ead13f080
-    ```
-
 ## 设备支持
 
 | 设备 | 说明 |

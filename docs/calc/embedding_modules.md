@@ -33,7 +33,9 @@ emb_bag = RecStoreEmbeddingBagCollection(
     ],
     lr=0.01,
     enable_fusion=True,
-    fusion_k=30
+    fusion_k=30,
+    ps_host=None,
+    ps_port=None
 )
 ```
 
@@ -45,6 +47,8 @@ emb_bag = RecStoreEmbeddingBagCollection(
 | lr | 优化器学习率 |
 | enable_fusion | 是否启用融合预取 (默认 True) |
 | fusion_k | 融合 ID 的位移量 (默认 30) |
+| ps_host | (可选) 远程 PS 服务器地址 |
+| ps_port | (可选) 远程 PS 服务器端口 |
 
 **EmbeddingBagConfig**
 
@@ -59,14 +63,14 @@ emb_bag = RecStoreEmbeddingBagCollection(
 
 **工作流程**
 
-| 步骤 | 代码位置 | 代码/操作 | 说明 |
-|------|---------|----------|------|
-| 1 | `src/python/pytorch/torchrec/EmbeddingBag.py:_RecStoreEBCFunction.forward` | 接收 `features: KeyedJaggedTensor` | 稀疏特征输入 |
-| 2 | 同上 | `config = module.embedding_bag_configs()[0]` | 获取嵌入表配置 |
-| 3 | 同上 | `all_embeddings = module.kv_client.pull(name, ids)` | 批量读取嵌入向量 |
-| 4 | 同上 | `all_embeddings.requires_grad = True` | 启用梯度计算 |
-| 5 | 同上 | `F.embedding_bag(input, weight, offsets, mode="sum")` | pooling 聚合 |
-| 6 | 同上 | 返回 `[batch_size, num_features, emb_dim]` | 最终输出 |
+| 步骤 | 代码/操作 | 说明 |
+|------|----------|------|
+| 1 | 接收 `features: KeyedJaggedTensor` | 稀疏特征输入 |
+| 2 | `config = module.embedding_bag_configs()[0]` | 获取嵌入表配置 |
+| 3 | `all_embeddings = module.kv_client.pull(name, ids)` | 批量读取嵌入向量 |
+| 4 | `all_embeddings.requires_grad = True` | 启用梯度计算 |
+| 5 | `F.embedding_bag(input, weight, offsets, mode="sum")` | pooling 聚合 |
+| 6 | 返回 `[batch_size, num_features, emb_dim]` | 最终输出 |
 
 **融合 ID 计算**
 

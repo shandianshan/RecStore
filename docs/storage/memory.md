@@ -29,6 +29,7 @@ class MallocApi {
 最简单的持久化内存分配器，基于 slab 机制。
 
 **特点**
+
 - 预分配固定大小的 slab
 - 使用位图管理空闲块
 - 线程安全 (通过 base::Lock)
@@ -59,6 +60,7 @@ class MallocApi {
 基于循环首次适应算法的持久化内存分配器。
 
 **特点**
+
 - 循环查找空闲块，具有 LRU 特性
 - 支持快速分配路径 (FastMalloc)
 - 使用位图 + 块大小数组管理
@@ -129,20 +131,19 @@ FACTORY_REGISTER(MallocApi, PersistSimpleMalloc, ...);
 FACTORY_REGISTER(MallocApi, PersistLoopShmMalloc, ...);
 ```
 
-## 配置示例
+??? example "配置示例"
+    在 BaseKVConfig 中指定内存管理器：
 
-在 BaseKVConfig 中指定内存管理器：
+    ```json
+    {
+        "path": "/data/recstore",
+        "value_memory_management": "PersistLoopShmMalloc",
+        "capacity": 1000000,
+        "value_size": 128
+    }
+    ```
 
-```json
-{
-  "path": "/data/recstore",
-  "value_memory_management": "PersistLoopShmMalloc",
-  "capacity": 1000000,
-  "value_size": 128
-}
-```
-
-默认使用 `PersistLoopShmMalloc`。
+    默认使用 `PersistLoopShmMalloc`。
 
 ## 使用流程
 

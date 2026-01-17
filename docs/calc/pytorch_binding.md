@@ -28,14 +28,14 @@ torch::Tensor emb_read_torch(const torch::Tensor& keys, int64_t embedding_dim)
 
 **工作流程**
 
-| 步骤 | 代码位置 | 代码/操作 | 说明 |
-|------|---------|----------|------|
-| 1 | `src/framework/pytorch/op_torch.cc:emb_read_torch` | 验证 keys 张量 (int64, 1D, contiguous) | 输入检查 |
-| 2 | 同上 | `if (keys.is_cuda()) cpu_keys = keys.cpu()` | GPU → CPU 复制 |
-| 3 | 同上 | `base::RecTensor rec_keys = ToRecTensor(cpu_keys, UINT64)` | 转换为 RecTensor |
-| 4 | 同上 | `op->EmbRead(rec_keys, rec_values)` | 调用 C++ op 读取 |
-| 5 | 同上 | `if (values.is_cuda()) values.copy_(cpu_values)` | CPU → GPU 复制 |
-| 6 | 同上 | 返回 `values` | 返回 float32 张量 `[N, embedding_dim]` |
+| 步骤 | 代码/操作 | 说明 |
+|------|----------|------|
+| 1 | 验证 keys 张量 (int64, 1D, contiguous) | 输入检查 |
+| 2 | `if (keys.is_cuda()) cpu_keys = keys.cpu()` | GPU → CPU 复制 |
+| 3 | `base::RecTensor rec_keys = ToRecTensor(cpu_keys, UINT64)` | 转换为 RecTensor |
+| 4 | `op->EmbRead(rec_keys, rec_values)` | 调用 C++ op 读取 |
+| 5 | `if (values.is_cuda()) values.copy_(cpu_values)` | CPU → GPU 复制 |
+| 6 | 返回 `values` | 返回 float32 张量 `[N, embedding_dim]` |
 
 **示例**
 ```python
@@ -180,28 +180,6 @@ ToRecTensor(const torch::Tensor& tensor, base::DataType dtype)
 | 提取数据指针 | `tensor.data_ptr()` |
 | 提取形状 | 遍历 `tensor.dim()` 获取各维大小 |
 | 指定数据类型 | UINT64 (keys) 或 FLOAT32 (values) |
-
-## 日志系统
-
-使用环境变量控制日志级别：
-
-```bash
-export RECSTORE_LOG_LEVEL=3  # DEBUG
-export RECSTORE_LOG_LEVEL=2  # INFO (默认)
-export RECSTORE_LOG_LEVEL=1  # WARNING
-export RECSTORE_LOG_LEVEL=0  # ERROR
-```
-
-**日志宏**
-```cpp
-RECSTORE_LOG(level, message)
-```
-
-输出示例：
-```
-[INFO] emb_read_torch: keys shape=[1000], dtype=Int64
-[DEBUG] emb_read_torch: calling op->EmbRead
-```
 
 ## 设备支持
 

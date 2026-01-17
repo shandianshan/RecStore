@@ -14,28 +14,11 @@
 #include <string>
 #include <fstream>
 
-// Assuming InitStrategyType is defined in base/tensor.h
 #include "base/tensor.h"
 #include "op.h"
+#include <glog/logging.h>
 
 namespace recstore {
-
-// Log level: 0=ERROR, 1=WARNING, 2=INFO, 3=DEBUG
-static int get_log_level() {
-  static int level = []() {
-    const char* env = std::getenv("RECSTORE_LOG_LEVEL");
-    if (!env)
-      return 1; // Default INFO
-    return std::atoi(env);
-  }();
-  return level;
-}
-#define RECSTORE_LOG(level, msg)                                               \
-  do {                                                                         \
-    if (get_log_level() >= level) {                                            \
-      std::cout << msg << std::endl;                                           \
-    }                                                                          \
-  } while (0)
 
 json load_config_from_file(const std::string& config_path) {
   std::ifstream file(config_path);
@@ -152,8 +135,7 @@ BasePSClient* create_ps_client_from_config(const json& config) {
 json GetGlobalConfig() {
   try {
     auto current_path = std::filesystem::current_path();
-    RECSTORE_LOG(2,
-                 "[INFO] Current working directory: " + current_path.string());
+    LOG(INFO) << "Current working directory: " << current_path.string();
 
     std::filesystem::path config_path;
     bool config_found = false;
@@ -162,7 +144,7 @@ json GetGlobalConfig() {
       if (std::filesystem::exists(p / "recstore_config.json")) {
         config_path  = p / "recstore_config.json";
         config_found = true;
-        RECSTORE_LOG(2, "[INFO] Found config file at: " + config_path.string());
+        LOG(INFO) << "Found config file at: " << config_path.string();
         break;
       }
     }
@@ -185,7 +167,7 @@ json GetGlobalConfig() {
 
     return load_config_from_file(config_path);
   } catch (const std::exception& e) {
-    RECSTORE_LOG(0, "[ERROR] Failed to load config: " + std::string(e.what()));
+    LOG(ERROR) << "[ERROR] Failed to load config: " << std::string(e.what());
     return json::object();
   }
 }
@@ -196,11 +178,10 @@ KVClientOp::KVClientOp() {
       json config = GetGlobalConfig();
       ps_client_  = create_ps_client_from_config(config);
 
-      RECSTORE_LOG(2, "[INFO] PS client initialized successfully.");
+      LOG(INFO) << "PS client initialized successfully.";
     } catch (const std::exception& e) {
-      RECSTORE_LOG(
-          0,
-          "[ERROR] Failed to initialize PS client: " + std::string(e.what()));
+      LOG(ERROR) << "[ERROR] Failed to initialize PS client: "
+                 << std::string(e.what());
       throw;
     }
   }
@@ -241,9 +222,8 @@ void KVClientOp::SetPSConfig(const std::string& host, int port) {
   config["shard"] = 0;
 
   ps_client_ = new GRPCParameterClient(config);
-  RECSTORE_LOG(2,
-               "[INFO] Re-initialized PS client with host="
-                   << final_host << " port=" << final_port);
+  LOG(INFO) << "Re-initialized PS client with host=" << final_host
+            << " port=" << final_port;
 }
 
 void KVClientOp::EmbRead(const RecTensor& keys, RecTensor& values) {
@@ -252,24 +232,21 @@ void KVClientOp::EmbRead(const RecTensor& keys, RecTensor& values) {
                              "KVClientOp::SetPSClient() first.");
   }
 
-  RECSTORE_LOG(0,
-               "[DEBUG][op.cc] EmbRead: keys.shape="
-                   << keys.shape(0) << ", values.shape=[" << values.shape(0)
-                   << ", " << values.shape(1) << "]");
-  RECSTORE_LOG(0,
-               "[DEBUG][op.cc] EmbRead: keys.data="
-                   << keys.data_as<uint64_t>()
-                   << ", values.data=" << values.data_as<float>());
+  LOG(ERROR) << "[op.cc] EmbRead: keys.shape=" << keys.shape(0)
+             << ", values.shape=[" << values.shape(0) << ", " << values.shape(1)
+             << "]";
+  LOG(ERROR) << "[op.cc] EmbRead: keys.data=" << keys.data_as<uint64_t>()
+             << ", values.data=" << values.data_as<float>();
   if (keys.shape(0) > 0) {
     std::ostringstream oss;
-    oss << "[DEBUG][op.cc] EmbRead: keys start with: ";
+    oss << "[op.cc] EmbRead: keys start with: ";
     for (int i = 0; i < std::min((int64_t)10, keys.shape(0)); ++i)
       oss << keys.data_as<uint64_t>()[i] << ", ";
-    RECSTORE_LOG(0, oss.str());
+    LOG(ERROR) << oss.str();
   }
   if (values.shape(0) > 0) {
     std::ostringstream oss;
-    oss << "[DEBUG][op.cc] EmbRead: values start with: ";
+    oss << "[op.cc] EmbRead: values start with: ";
     for (int i = 0; i < std::min((int64_t)10, values.shape(0)); ++i) {
       oss << "[";
       for (int j = 0; j < std::min((int64_t)10, values.shape(1)); ++j) {
@@ -277,7 +254,7 @@ void KVClientOp::EmbRead(const RecTensor& keys, RecTensor& values) {
       }
       oss << "] ";
     }
-    RECSTORE_LOG(0, oss.str());
+    LOG(ERROR) << oss.str();
   }
   validate_keys(keys);
   validate_embeddings(values, "Values");
@@ -411,20 +388,20 @@ void KVClientOp::EmbWrite(const RecTensor& keys, const RecTensor& values) {
     values_vector.push_back(std::move(row));
   }
 
-  RECSTORE_LOG(2, "=== Keys Array Info ===");
-  RECSTORE_LOG(2, "Keys size: " << L);
+  LOG(INFO) << "=== Keys Array Info ===";
+  LOG(INFO) << "Keys size: " << L;
   if (L > 0) {
     std::ostringstream keys_stream;
     keys_stream << "First 3 keys: ";
     for (int64_t i = 0; i < std::min(L, static_cast<int64_t>(3)); ++i) {
       keys_stream << keys_array[i] << " ";
     }
-    RECSTORE_LOG(2, keys_stream.str());
+    LOG(INFO) << keys_stream.str();
   }
 
-  RECSTORE_LOG(2, "=== Values Vector Info ===");
-  RECSTORE_LOG(2, "Values total elements: " << total_values);
-  RECSTORE_LOG(2, "Embedding dimension D: " << D);
+  LOG(INFO) << "=== Values Vector Info ===";
+  LOG(INFO) << "Values total elements: " << total_values;
+  LOG(INFO) << "Embedding dimension D: " << D;
   if (L > 0 && D > 0) {
     std::ostringstream values_stream;
     values_stream << "First 3 embeddings (each first 3 items): ";
@@ -435,7 +412,7 @@ void KVClientOp::EmbWrite(const RecTensor& keys, const RecTensor& values) {
       }
       values_stream << "] ";
     }
-    RECSTORE_LOG(2, values_stream.str());
+    LOG(INFO) << values_stream.str();
   }
 
   bool success = ps_client_->PutParameter(keys_array, values_vector);

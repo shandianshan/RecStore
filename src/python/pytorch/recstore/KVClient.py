@@ -108,9 +108,9 @@ class RecStoreClient:
         print(f"Initializing tensor '{name}' with shape {shape} and dtype {dtype} (base_offset={base_offset}).")
         
         num_embeddings, embedding_dim = shape
-        print(f"[DEBUG] Calling init_embedding_table for '{name}' with num_embeddings={num_embeddings}, embedding_dim={embedding_dim}")
+        # print(f"[DEBUG] Calling init_embedding_table for '{name}' with num_embeddings={num_embeddings}, embedding_dim={embedding_dim}")
         success = self.ops.init_embedding_table(name, int(num_embeddings), int(embedding_dim))
-        print(f"[DEBUG] init_embedding_table returned: {success}")
+        # print(f"[DEBUG] init_embedding_table returned: {success}")
         if not success:
             raise RuntimeError(f"Failed to initialize embedding table '{name}' on backend.")
         

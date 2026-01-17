@@ -46,12 +46,12 @@ _DistEmbFunction.backward 对重复 ID 的梯度进行合并：
 
 **梯度合并流程**
 
-| 步骤 | 代码位置 | 代码 | 说明 |
-|------|---------|------|------|
-| 1 | `src/python/pytorch/recstore/DistEmb.py:_DistEmbFunction.backward` | `unique_ids, inverse = torch.unique(ids_cpu, return_inverse=True)` | 对 ID 去重，保留逆映射 |
-| 2 | 同上 | `grad_sum = torch.zeros((unique_ids.size(0), grad_cpu.size(1)))` | 创建去重后的梯度容器 |
-| 3 | 同上 | `grad_sum.index_add_(0, inverse, grad_cpu)` | 相同 ID 的梯度累加 |
-| 4 | 同上 | `module_instance._trace.append((unique_ids, grad_sum))` | 追踪合并后的梯度 |
+| 步骤 | 代码 | 说明 |
+|------|------|------|
+| 1 | `unique_ids, inverse = torch.unique(ids_cpu, return_inverse=True)` | 对 ID 去重，保留逆映射 |
+| 2 | `grad_sum = torch.zeros((unique_ids.size(0), grad_cpu.size(1)))` | 创建去重后的梯度容器 |
+| 3 | `grad_sum.index_add_(0, inverse, grad_cpu)` | 相同 ID 的梯度累加 |
+| 4 | `module_instance._trace.append((unique_ids, grad_sum))` | 追踪合并后的梯度 |
 
 ## SparseOptimizer
 

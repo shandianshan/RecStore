@@ -30,18 +30,18 @@ ToRecTensor(const torch::Tensor& tensor, base::DataType dtype) {
 
 torch::Tensor emb_read_torch(const torch::Tensor& keys, int64_t embedding_dim) {
   recstore::ConfigureLogging();
-  LOG(INFO) << "emb_read_torch: keys shape=" << keys.sizes()
-            << ", dtype=" << keys.dtype() << ", data_ptr=" << keys.data_ptr();
-  LOG(INFO) << "emb_read_torch: embedding_dim=" << embedding_dim;
+  LOG(INFO) << "keys shape=" << keys.sizes() << ", dtype=" << keys.dtype()
+            << ", data_ptr=" << keys.data_ptr();
+  LOG(INFO) << "embedding_dim=" << embedding_dim;
   torch::Tensor cpu_keys = keys;
   if (keys.is_cuda()) {
-    LOG(INFO) << "emb_read_torch: copying GPU keys to CPU";
+    LOG(INFO) << "copying GPU keys to CPU";
     cpu_keys = keys.cpu();
   }
   if (cpu_keys.size(0) > 0) {
     auto cpu_keys_acc = cpu_keys.accessor<int64_t, 1>();
     std::ostringstream oss;
-    oss << "emb_read_torch: keys start with: ";
+    oss << "keys start with: ";
     for (int i = 0; i < std::min((int64_t)10, keys.size(0)); ++i)
       oss << cpu_keys_acc[i] << ", ";
     LOG(INFO) << oss.str();
@@ -57,7 +57,7 @@ torch::Tensor emb_read_torch(const torch::Tensor& keys, int64_t embedding_dim) {
 
   const int64_t num_keys = cpu_keys.size(0);
   if (num_keys == 0) {
-    LOG(INFO) << "emb_read_torch: num_keys==0, returning empty";
+    LOG(INFO) << "num_keys==0, returning empty";
     return torch::empty(
         {0, embedding_dim}, cpu_keys.options().dtype(torch::kFloat32));
   }
@@ -68,18 +68,17 @@ torch::Tensor emb_read_torch(const torch::Tensor& keys, int64_t embedding_dim) {
       {num_keys, embedding_dim}, keys.options().dtype(torch::kFloat32));
   torch::Tensor cpu_values = values;
   if (values.is_cuda()) {
-    LOG(INFO) << "emb_read_torch: copying GPU values to CPU for C++ operation";
+    LOG(INFO) << "copying GPU values to CPU for C++ operation";
     cpu_values = values.cpu();
   }
   TORCH_CHECK(cpu_values.is_contiguous(),
               "Internal error: Created values tensor is not contiguous");
-  LOG(INFO) << "emb_read_torch: values shape=" << cpu_values.sizes()
-            << ", dtype=" << cpu_values.dtype()
-            << ", data_ptr=" << cpu_values.data_ptr();
+  LOG(INFO) << "values shape=" << cpu_values.sizes() << ", dtype="
+            << cpu_values.dtype() << ", data_ptr=" << cpu_values.data_ptr();
   if (cpu_values.size(0) > 0) {
     auto values_acc = cpu_values.accessor<float, 2>();
     std::ostringstream oss;
-    oss << "emb_read_torch: values start with: ";
+    oss << "values start with: ";
     for (int i = 0; i < std::min((int64_t)10, cpu_values.size(0)); ++i) {
       oss << "[";
       for (int j = 0; j < std::min((int64_t)10, cpu_values.size(1)); ++j) {
@@ -93,12 +92,12 @@ torch::Tensor emb_read_torch(const torch::Tensor& keys, int64_t embedding_dim) {
   base::RecTensor rec_keys   = ToRecTensor(cpu_keys, base::DataType::UINT64);
   base::RecTensor rec_values = ToRecTensor(cpu_values, base::DataType::FLOAT32);
 
-  LOG(INFO) << "emb_read_torch: calling op->EmbRead";
+  LOG(INFO) << "calling op->EmbRead";
   op->EmbRead(rec_keys, rec_values);
-  LOG(INFO) << "emb_read_torch: EmbRead done";
+  LOG(INFO) << "EmbRead done";
 
   if (values.is_cuda()) {
-    LOG(INFO) << "emb_read_torch: copying results back to GPU";
+    LOG(INFO) << "copying results back to GPU";
     values.copy_(cpu_values);
   }
 
@@ -308,7 +307,7 @@ void set_ps_config_torch(const std::string& host, int64_t port) {
   if (kv_op) {
     kv_op->SetPSConfig(host, static_cast<int>(port));
   } else {
-    LOG(ERROR) << "[ERROR] Failed to cast CommonOp to KVClientOp. Cannot set "
+    LOG(ERROR) << "Failed to cast CommonOp to KVClientOp. Cannot set "
                   "PS config.";
     throw std::runtime_error(
         "Failed to set PS config: storage backend is not KVClientOp");

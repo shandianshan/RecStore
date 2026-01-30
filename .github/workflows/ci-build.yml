@@ -101,6 +101,7 @@ jobs:
           set -euo pipefail
           bash ci/pack/pack_artifact.sh build/packed-ps-server.tar.gz build/bin/ps_server
           bash ci/pack/pack_artifact.sh build/packed-recstore-ops.tar.gz build/lib/lib_recstore_ops.so
+          bash ci/pack/pack_artifact.sh build/packed-ycsb.tar.gz build/bin/ycsb
 
       - name: Upload packed artifacts (bundle)
         if: success()
@@ -110,6 +111,7 @@ jobs:
           path: |
             build/packed-ps-server.tar.gz
             build/packed-recstore-ops.tar.gz
+            build/packed-ycsb.tar.gz
 
       - name: Upload build artifacts
         if: always()
@@ -118,6 +120,7 @@ jobs:
           name: build-logs
           path: |
             init_env_*.log
+            build/CMakeCache.txt
             build/CMakeCache.txt
             build/compile_commands.json
 
@@ -233,3 +236,66 @@ jobs:
         with:
           name: grpc-run-logs
           path: runner/logs/
+
+  run-ycsb-benchmark:
+    name: Run YCSB Benchmark
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      TORCH_VERSION: "2.5.0"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+
+      - name: Install host prerequisites
+        run: |
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          bash ci/env/init_host_prereqs.sh
+        
+      - name: Download torch wheel
+        uses: actions/download-artifact@v4
+        with:
+          name: torch-wheel
+          path: wheel
+
+      - name: Install wheel
+        run: |
+          set -euo pipefail
+          WHL=$(ls -1 wheel/torch-${TORCH_VERSION}*linux_x86_64.whl | head -n1)
+          python3 -m pip install --no-cache-dir "$WHL"
+
+      - name: Download packed artifacts bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: packed-bundle
+          path: runner
+
+      - name: Extract YCSB package
+        run: |
+          set -euo pipefail
+          mkdir -p runner/extracted-ycsb
+          tar -xzf runner/packed-ycsb.tar.gz -C runner/extracted-ycsb
+          echo "Extracted YCSB contents:" && find runner/extracted-ycsb -maxdepth 3
+
+      - name: Run YCSB Test Scripts
+        run: |
+          set -euo pipefail
+          
+          # Use the newly created scripts to run the test
+          # The script handles environment setup (using the detected package path) and test execution
+          
+          # Point the script to the extracted package location
+          PKG_ROOT=$(pwd)/runner/extracted-ycsb/package
+          
+          bash ci/test/test_ycsb.sh "${PKG_ROOT}"
+
+      - name: Upload YCSB logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ycsb-test-logs
+          path: dbtestlog/*.log

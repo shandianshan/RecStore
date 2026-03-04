@@ -142,6 +142,15 @@ public:
     }
   }
 
+  void clear() override {
+    if (hash_table_) {
+      hash_table_->clear();
+    }
+    if (shm_malloc_) {
+      shm_malloc_->Initialize();
+    }
+  }
+
 private:
   ExtendibleHash* hash_table_;
   // std::shared_mutex lock_;

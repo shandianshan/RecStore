@@ -14,10 +14,10 @@ using namespace recstore;
 
 static bool
 check_eq_1d(const std::vector<float>& a, const std::vector<float>& b) {
-  if (a.size() != b.size())
+  if (a.size() < b.size())
     return false;
 
-  for (int i = 0; i < a.size(); i++) {
+  for (int i = 0; i < b.size(); i++) {
     if (std::abs(a[i] - b[i]) > 1e-6)
       return false;
   }

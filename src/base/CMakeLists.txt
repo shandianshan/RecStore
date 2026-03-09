@@ -6,10 +6,10 @@ find_package(CURL REQUIRED)
 
 if(USE_PERF_REPORT)
   add_library(report_client report/report_client.cpp)
-  target_link_libraries(report_client PUBLIC curl nlohmann_json::nlohmann_json)
+  target_link_libraries(report_client PUBLIC curl nlohmann_json::nlohmann_json glog)
 
   add_library(report SHARED report/report_client.cpp)
-  target_link_libraries(report PUBLIC curl nlohmann_json::nlohmann_json)
+  target_link_libraries(report PUBLIC curl nlohmann_json::nlohmann_json glog)
 endif()
 
 add_library(base base.cc pprint.cc shm_helper.cc bind_core.cc counter.cc)

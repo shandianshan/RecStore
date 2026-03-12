@@ -7,7 +7,9 @@
 #include <stdexcept>
 #include "sparse_tensor.h"
 #include "ps/base/base_client.h"
+#include "ps/base/parameters.h"
 
+using ::ParameterCompressReader;
 using recstore::EmbeddingTableConfig;
 
 class Optimizer {
@@ -26,8 +28,7 @@ public:
                     BaseKV* base_kv) = 0;
 
   virtual void Update(std::string table,
-                      const std::vector<uint64_t>& keys,
-                      const std::vector<std::vector<float>>& grads,
+                      const ParameterCompressReader* reader,
                       unsigned tid) = 0;
 };
 
@@ -42,8 +43,7 @@ public:
             const EmbeddingTableConfig& config,
             BaseKV* base_kv) override;
   void Update(std::string table,
-              const std::vector<uint64_t>& keys,
-              const std::vector<std::vector<float>>& grads,
+              const ParameterCompressReader* reader,
               unsigned tid) override;
 };
 
@@ -60,8 +60,7 @@ public:
             const EmbeddingTableConfig& config,
             BaseKV* base_kv) override;
   void Update(std::string table,
-              const std::vector<uint64_t>& keys,
-              const std::vector<std::vector<float>>& grads,
+              const ParameterCompressReader* reader,
               unsigned tid) override;
 };
 
@@ -78,7 +77,6 @@ public:
             const EmbeddingTableConfig& config,
             BaseKV* base_kv) override;
   void Update(std::string table,
-              const std::vector<uint64_t>& keys,
-              const std::vector<std::vector<float>>& grads,
+              const ParameterCompressReader* reader,
               unsigned tid) override;
 };

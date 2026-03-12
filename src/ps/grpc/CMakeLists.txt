@@ -46,8 +46,9 @@ target_link_libraries(grpc_ps_server PUBLIC
     gflags
     glog
     TBB::tbb
-
+    report_client
 )
+target_compile_definitions(grpc_ps_server PRIVATE ENABLE_PERF_REPORT)
 
 # Distributed gRPC PS Client
 add_library(dist_grpc_ps_client

@@ -145,7 +145,7 @@ private:
   }
 
 public:
-  SpdkBackend(IOConfig& config) : IOBackend(config) {};
+  SpdkBackend(IOConfig& config) : IOBackend(config){};
   ~SpdkBackend() {
     if (controller_active_.load(std::memory_order_acquire)) {
       int remaining =

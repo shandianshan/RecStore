@@ -51,6 +51,33 @@ DEFINE_int32(brpc_server_num_threads,
 
 namespace recstore {
 
+namespace {
+
+bool ExtractPayloadBytes(
+    const brpc::Controller* cntl,
+    const std::string& proto_bytes,
+    std::string* payload_storage,
+    const char** payload_data,
+    int* payload_size) {
+  if (!cntl->request_attachment().empty()) {
+    payload_storage->clear();
+    cntl->request_attachment().copy_to(payload_storage);
+    *payload_data = payload_storage->data();
+    *payload_size = payload_storage->size();
+    return true;
+  }
+  if (!proto_bytes.empty()) {
+    *payload_data = proto_bytes.data();
+    *payload_size = proto_bytes.size();
+    return true;
+  }
+  *payload_data = nullptr;
+  *payload_size = 0;
+  return false;
+}
+
+} // namespace
+
 BRPCParameterServiceImpl::BRPCParameterServiceImpl(CachePS* cache_ps)
     : cache_ps_(cache_ps) {
   start_time_ = std::chrono::steady_clock::now();
@@ -91,15 +118,24 @@ void BRPCParameterServiceImpl::GetParameter(
     GetParameterResponse* response,
     google::protobuf::Closure* done) {
   brpc::ClosureGuard done_guard(done);
+  brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
 
 #ifdef ENABLE_PERF_REPORT
-  auto start_time        = std::chrono::high_resolution_clock::now();
-  brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
-  uint64_t trace_id      = cntl->log_id();
-  std::string unique_id  = "embread_debug" + std::to_string(trace_id);
+  auto start_time       = std::chrono::high_resolution_clock::now();
+  uint64_t trace_id     = cntl->log_id();
+  std::string unique_id = "embread_debug" + std::to_string(trace_id);
 #endif
-
-  base::ConstArray<uint64_t> keys_array(request->keys());
+  std::string keys_storage;
+  const char* keys_data = nullptr;
+  int keys_size         = 0;
+  ExtractPayloadBytes(
+      cntl, request->keys(), &keys_storage, &keys_data, &keys_size);
+  base::ConstArray<uint64_t> keys_array;
+  keys_array.SetData(keys_data, keys_size);
+  if (keys_size % static_cast<int>(sizeof(uint64_t)) != 0) {
+    LOG(ERROR) << "GetParameter invalid keys payload size=" << keys_size;
+    return;
+  }
   bool isPerf = request->has_perf() && request->perf();
 
   if (isPerf) {
@@ -108,7 +144,6 @@ void BRPCParameterServiceImpl::GetParameter(
 
   xmh::Timer timer_ps_get_req("PS GetParameter Req");
   ParameterCompressor compressor;
-  std::vector<std::string> blocks;
 
   FB_LOG_EVERY_MS(INFO, 1000)
       << "[bRPC PS] Getting " << keys_array.Size() << " keys";
@@ -122,10 +157,10 @@ void BRPCParameterServiceImpl::GetParameter(
   packs.reserve(keys_array.Size());
   cache_ps_->GetParameterRun2Completion(keys_array, packs, 0);
 
-  for (const auto& pack : packs) {
+  for (auto& pack : packs) {
+    compressor.AddItem(pack, nullptr);
     total_dim += pack.dim;
   }
-  compressor.BatchAddItems(packs);
 #ifdef ENABLE_PERF_REPORT
   auto cache_loop_end = std::chrono::high_resolution_clock::now();
   auto cache_loop_duration =
@@ -162,9 +197,7 @@ void BRPCParameterServiceImpl::GetParameter(
   auto toblock_start = std::chrono::high_resolution_clock::now();
 #endif
 
-  compressor.ToBlock(&blocks);
-  CHECK_EQ(blocks.size(), 1);
-  response->mutable_parameter_value()->swap(blocks[0]);
+  compressor.AppendToIOBuf(&cntl->response_attachment());
 
 #ifdef ENABLE_PERF_REPORT
   auto toblock_end = std::chrono::high_resolution_clock::now();
@@ -295,13 +328,31 @@ void BRPCParameterServiceImpl::PutParameter(
     google::protobuf::Closure* done) {
   brpc::ClosureGuard done_guard(done);
 
+  brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
+
+  std::string payload_storage;
+  const char* payload_data = nullptr;
+  int payload_size         = 0;
+  if (!ExtractPayloadBytes(
+          cntl,
+          request->parameter_value(),
+          &payload_storage,
+          &payload_data,
+          &payload_size)) {
+    LOG(ERROR) << "PutParameter empty payload";
+    return;
+  }
+
 #ifdef ENABLE_PERF_REPORT
   auto start_time = std::chrono::high_resolution_clock::now();
 #endif
 
   const ParameterCompressReader* reader =
-      reinterpret_cast<const ParameterCompressReader*>(
-          request->parameter_value().data());
+      reinterpret_cast<const ParameterCompressReader*>(payload_data);
+  if (!reader->Valid(payload_size)) {
+    LOG(ERROR) << "PutParameter invalid payload, size=" << payload_size;
+    return;
+  }
   int size             = reader->item_size();
   uint64_t total_bytes = 0;
 
@@ -345,20 +396,38 @@ void BRPCParameterServiceImpl::UpdateParameter(
     google::protobuf::Closure* done) {
   brpc::ClosureGuard done_guard(done);
 
+  brpc::Controller* cntl = static_cast<brpc::Controller*>(controller);
+
 #ifdef ENABLE_PERF_REPORT
   auto start_time = std::chrono::high_resolution_clock::now();
 #endif
 
   try {
     const std::string& table_name = request->table_name();
+
+    std::string payload_storage;
+    const char* payload_data = nullptr;
+    int payload_size         = 0;
+    if (!ExtractPayloadBytes(
+            cntl,
+            request->gradients(),
+            &payload_storage,
+            &payload_data,
+            &payload_size)) {
+      throw std::runtime_error("UpdateParameter empty gradients payload");
+    }
+
     const ParameterCompressReader* reader =
-        reinterpret_cast<const ParameterCompressReader*>(
-            request->gradients().data());
+        reinterpret_cast<const ParameterCompressReader*>(payload_data);
+    if (!reader->Valid(payload_size)) {
+      throw std::runtime_error("UpdateParameter invalid gradients payload");
+    }
+    int size = reader->item_size();
+
     bool success = cache_ps_->UpdateParameter(table_name, reader, 0);
 
     FB_LOG_EVERY_MS(INFO, 2000)
-        << "UpdateParameter: table=" << table_name
-        << ", keys=" << reader->item_size();
+        << "UpdateParameter: table=" << table_name << ", keys=" << size;
 
     reply->set_success(success);
   } catch (const std::exception& e) {

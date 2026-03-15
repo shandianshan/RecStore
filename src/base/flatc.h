@@ -148,6 +148,17 @@ public:
     Clear();
   }
 
+  template <typename BufferT>
+  void AppendToIOBuf(BufferT* buf) {
+    if (offsets_.size() < 2)
+      return;
+    offsets_[0] = offsets_.size() - 1;
+    buf->append(reinterpret_cast<const char*>(&offsets_[0]),
+                offsets_.size() * sizeof(int));
+    buf->append(item_data_.data(), item_data_.size());
+    Clear();
+  }
+
   int byte_size() const {
     return offsets_.size() * sizeof(int) + item_data_.size();
   }
@@ -192,6 +203,18 @@ public:
     new_block->append(reinterpret_cast<const char*>(&keys_[0]),
                       keys_.size() * sizeof(uint64_t));
     value_compressor_.AppendToBlock(new_block);
+    Clear();
+  }
+
+  template <typename BufferT>
+  void AppendToIOBuf(BufferT* buf) {
+    if (keys_.size() < 1)
+      return;
+    int key_num = keys_.size();
+    buf->append(reinterpret_cast<const char*>(&key_num), sizeof(int));
+    buf->append(reinterpret_cast<const char*>(&keys_[0]),
+                keys_.size() * sizeof(uint64_t));
+    value_compressor_.AppendToIOBuf(buf);
     Clear();
   }
 

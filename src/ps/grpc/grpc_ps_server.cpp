@@ -109,10 +109,10 @@ private:
     packs.reserve(keys_array.Size());
     cache_ps_->GetParameterRun2Completion(keys_array, packs, 0);
 
-    for (const auto& pack : packs) {
+    for (auto& pack : packs) {
+      compressor.AddItem(pack, &blocks);
       total_dim += pack.dim;
     }
-    compressor.BatchAddItems(packs);
 #ifdef ENABLE_PERF_REPORT
     auto cache_end_time = std::chrono::high_resolution_clock::now();
     auto cache_duration =
@@ -273,11 +273,12 @@ private:
       const ParameterCompressReader* reader =
           reinterpret_cast<const ParameterCompressReader*>(
               request->gradients().data());
+      int size = reader->item_size();
+
       bool success = cache_ps_->UpdateParameter(table_name, reader, 0);
 
       FB_LOG_EVERY_MS(INFO, 2000)
-          << "UpdateParameter: table=" << table_name
-          << ", keys=" << reader->item_size();
+          << "UpdateParameter: table=" << table_name << ", keys=" << size;
 
       reply->set_success(success);
     } catch (const std::exception& e) {

@@ -118,7 +118,7 @@ public:
       close(fd);
       fd = -1;
     }
-    if (!empty_page) {
+    if (empty_page) {
       delete[] empty_page;
       empty_page = nullptr;
     }

@@ -146,8 +146,8 @@ int BRPCParameterClient::GetParameter(const base::ConstArray<uint64_t>& keys,
     key_sizes.push_back(key_size);
 
     controllers[index].request_attachment().append(
-      reinterpret_cast<const char*>(&keys[start]),
-      sizeof(uint64_t) * key_size);
+        reinterpret_cast<const char*>(&keys[start]),
+        sizeof(uint64_t) * key_size);
 
     google::protobuf::Closure* done = brpc::NewCallback([]() { /* 空回调 */ });
     stub.GetParameter(
@@ -206,8 +206,8 @@ int BRPCParameterClient::GetParameter(const base::ConstArray<uint64_t>& keys,
   std::string payload_storage;
 
   for (int i = 0; i < responses.size(); ++i) {
-    auto& response  = responses[i];
-    int key_size    = key_sizes[i];
+    auto& response   = responses[i];
+    int key_size     = key_sizes[i];
     int payload_size = 0;
     auto parameters  = ExtractGetResponseReader(
         controllers[i], response, &payload_storage, &payload_size);
@@ -356,8 +356,8 @@ int BRPCParameterClient::GetParameter(const base::ConstArray<uint64_t>& keys,
     key_sizes.push_back(key_size);
 
     controllers[index].request_attachment().append(
-      reinterpret_cast<const char*>(&keys[start]),
-      sizeof(uint64_t) * key_size);
+        reinterpret_cast<const char*>(&keys[start]),
+        sizeof(uint64_t) * key_size);
 
     google::protobuf::Closure* done = brpc::NewCallback([]() { /* 空回调 */ });
     stub.GetParameter(
@@ -414,8 +414,8 @@ int BRPCParameterClient::GetParameter(const base::ConstArray<uint64_t>& keys,
   // 解析结果
   std::string payload_storage;
   for (int i = 0; i < responses.size(); ++i) {
-    auto& response  = responses[i];
-    int key_size    = key_sizes[i];
+    auto& response   = responses[i];
+    int key_size     = key_sizes[i];
     int payload_size = 0;
     auto parameters  = ExtractGetResponseReader(
         controllers[i], response, &payload_storage, &payload_size);
@@ -547,8 +547,8 @@ BRPCParameterClient::PrefetchParameter(const base::ConstArray<uint64_t>& keys) {
 
     pb->controllers_[index] = std::make_unique<brpc::Controller>();
     pb->controllers_[index]->request_attachment().append(
-      reinterpret_cast<const char*>(&keys[start]),
-      sizeof(uint64_t) * key_size);
+        reinterpret_cast<const char*>(&keys[start]),
+        sizeof(uint64_t) * key_size);
 
     google::protobuf::Closure* done = brpc::NewCallback(OnPrefetchDone, pb);
     stub.GetParameter(
@@ -602,8 +602,8 @@ bool BRPCParameterClient::GetPrefetchResult(
       return false;
     }
 
-    auto& response  = pb.responses_[i];
-    int key_size    = pb.key_sizes_[i];
+    auto& response = pb.responses_[i];
+    int key_size   = pb.key_sizes_[i];
     std::string payload_storage;
     int payload_size = 0;
     auto parameters  = ExtractGetResponseReader(

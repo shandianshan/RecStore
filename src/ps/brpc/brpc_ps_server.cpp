@@ -53,11 +53,12 @@ namespace recstore {
 
 namespace {
 
-bool ExtractPayloadBytes(const brpc::Controller* cntl,
-                        const std::string& proto_bytes,
-                        std::string* payload_storage,
-                        const char** payload_data,
-                        int* payload_size) {
+bool ExtractPayloadBytes(
+    const brpc::Controller* cntl,
+    const std::string& proto_bytes,
+    std::string* payload_storage,
+    const char** payload_data,
+    int* payload_size) {
   if (!cntl->request_attachment().empty()) {
     payload_storage->clear();
     cntl->request_attachment().copy_to(payload_storage);
@@ -127,7 +128,8 @@ void BRPCParameterServiceImpl::GetParameter(
   std::string keys_storage;
   const char* keys_data = nullptr;
   int keys_size         = 0;
-  ExtractPayloadBytes(cntl, request->keys(), &keys_storage, &keys_data, &keys_size);
+  ExtractPayloadBytes(
+      cntl, request->keys(), &keys_storage, &keys_data, &keys_size);
   base::ConstArray<uint64_t> keys_array;
   keys_array.SetData(keys_data, keys_size);
   if (keys_size % static_cast<int>(sizeof(uint64_t)) != 0) {
@@ -331,11 +333,12 @@ void BRPCParameterServiceImpl::PutParameter(
   std::string payload_storage;
   const char* payload_data = nullptr;
   int payload_size         = 0;
-  if (!ExtractPayloadBytes(cntl,
-                           request->parameter_value(),
-                           &payload_storage,
-                           &payload_data,
-                           &payload_size)) {
+  if (!ExtractPayloadBytes(
+          cntl,
+          request->parameter_value(),
+          &payload_storage,
+          &payload_data,
+          &payload_size)) {
     LOG(ERROR) << "PutParameter empty payload";
     return;
   }
@@ -405,11 +408,12 @@ void BRPCParameterServiceImpl::UpdateParameter(
     std::string payload_storage;
     const char* payload_data = nullptr;
     int payload_size         = 0;
-    if (!ExtractPayloadBytes(cntl,
-                             request->gradients(),
-                             &payload_storage,
-                             &payload_data,
-                             &payload_size)) {
+    if (!ExtractPayloadBytes(
+            cntl,
+            request->gradients(),
+            &payload_storage,
+            &payload_data,
+            &payload_size)) {
       throw std::runtime_error("UpdateParameter empty gradients payload");
     }
 

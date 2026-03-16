@@ -45,6 +45,15 @@ find_library(SYSTEM_OPENSSL_CRYPTO_LIB
 find_package(ZLIB REQUIRED)
 find_package(Threads REQUIRED)
 
+if(USE_BRPC_CPU_PROFILER)
+    find_library(GPERFTOOLS_TCMALLOC_AND_PROFILER
+        NAMES tcmalloc_and_profiler
+    )
+    if(NOT GPERFTOOLS_TCMALLOC_AND_PROFILER)
+        message(FATAL_ERROR "USE_BRPC_CPU_PROFILER=ON but libtcmalloc_and_profiler was not found")
+    endif()
+endif()
+
 if(NOT SYSTEM_OPENSSL_INCLUDE OR NOT SYSTEM_OPENSSL_SSL_LIB OR NOT SYSTEM_OPENSSL_CRYPTO_LIB)
     message(FATAL_ERROR "Could NOT find system OpenSSL libraries under /usr")
 endif()
@@ -120,6 +129,11 @@ if(brpc_FOUND)
         leveldb
         TBB::tbb
     )
+    if(USE_BRPC_CPU_PROFILER)
+        target_compile_definitions(brpc_ps_server PRIVATE BRPC_ENABLE_CPU_PROFILER)
+        target_compile_options(brpc_ps_server PRIVATE -fno-omit-frame-pointer)
+        target_link_libraries(brpc_ps_server PRIVATE ${GPERFTOOLS_TCMALLOC_AND_PROFILER})
+    endif()
     if(USE_PERF_REPORT)
         target_compile_definitions(brpc_ps_server PRIVATE ENABLE_PERF_REPORT)
         target_link_libraries(brpc_ps_server PUBLIC report_client)

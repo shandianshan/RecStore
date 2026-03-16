@@ -4,6 +4,53 @@ RecStore 内置了完善的性能埋点与分析机制，涵盖了从 PyTorch OP
 
 ## 1. 快速使用
 
+### bRPC 内置 CPU Profiler
+
+RecStore 支持直接用 bRPC builtin profiler 进行热点分析，适合 Get/Update 等多种 RPC 混合流量场景。
+
+#### 编译
+
+需在 CMake 配置时打开 `USE_BRPC_CPU_PROFILER`：
+
+```bash linenums="1" hl_lines="4"
+cmake .. \
+    -DCMAKE_BUILD_TYPE=Debug \
+    -DUSE_PERF_REPORT=ON \
+    -DUSE_BRPC_CPU_PROFILER=ON \
+    -DUSE_GPERF_PROFILING=ON
+```
+
+#### 启动
+
+??? info "安装 FlameGraph 来生成火焰图"
+    
+    ```bash
+    cd /tmp
+    git clone https://github.com/brendangregg/FlameGraph.git
+    ```
+
+启动时需要使用 bRPC 作为网络层通讯，同时不要设置 `CPUPROFILE`，否则会和 builtin profiler 冲突：
+
+```bash title="带参数启用参数服务器"
+unset CPUPROFILE
+export FLAMEGRAPH_PL_PATH=/tmp/FlameGraph/flamegraph.pl
+./build/bin/ps_server --config_path ./recstore_config.json
+```
+
+假设服务监听端口为 15000（通常在终端输出地址），可访问：
+
+- `http://127.0.0.1:15000/hotspots/cpu?seconds=10`
+- `http://127.0.0.1:15000/pprof/profile?seconds=10`
+
+如需远程访问，可先做端口转发。
+
+
+???+ info "采样频率与时长"
+
+    采样频率由 `CPUPROFILE_FREQUENCY` 环境变量控制，默认 100（每秒 100 次）。
+    采样时长通过 URL 参数 `?seconds=5` 控制。
+    其他信息请参考 [bRPC 官方 profiler 文档](https://github.com/apache/brpc/blob/master/docs/cn/cpu_profiler.md)
+
 ### 运行性能统计
 
 **服务端 (PS Server)**

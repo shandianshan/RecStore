@@ -21,12 +21,18 @@ workload_name() {
 extract_metric() {
   local pattern="$1"
   local file="$2"
-  grep -E "$pattern" "$file" | tail -n1 | awk -F': ' '{print $2}' | tr -d '\r'
+  local line=""
+  line="$(grep -E "$pattern" "$file" | tail -n1 || true)"
+  [[ -n "$line" ]] || return 0
+  awk -F': ' '{print $2}' <<<"$line" | tr -d '\r'
 }
 
 extract_run_summary() {
   local file="$1"
-  grep -E "sec: [0-9]+ operations; \[" "$file" | tail -n1 | sed -E 's/^.*operations;[[:space:]]*//'
+  local line=""
+  line="$(grep -E "sec: [0-9]+ operations; \[" "$file" | tail -n1 || true)"
+  [[ -n "$line" ]] || return 0
+  sed -E 's/^.*operations;[[:space:]]*//' <<<"$line"
 }
 
 files=("$LOG_DIR"/kvdb_bench_workload*.log)
@@ -63,7 +69,7 @@ for file in "$LOG_DIR"/kvdb_bench_workload*.log; do
   run_rt="$(extract_metric 'Run runtime\(sec\):' "$file")"
   run_mix="$(extract_run_summary "$file")"
 
-  run_profile="$(grep -E '^PROFILE: interrupts/evictions/bytes = ' "$file" | tail -n1 | sed -E 's/^PROFILE: interrupts\/evictions\/bytes = //')"
+  run_profile="$(grep -E '^PROFILE: interrupts/evictions/bytes = ' "$file" | tail -n1 | sed -E 's/^PROFILE: interrupts\/evictions\/bytes = //' || true)"
 
   load_tp="${load_tp:-N/A}"
   run_tp="${run_tp:-N/A}"

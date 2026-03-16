@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 
 option(ENABLE_CUDA "Build with CUDA support" ON)
+option(USE_BRPC_CPU_PROFILER "Enable bRPC builtin CPU profiler" OFF)
 
 if(ENABLE_CUDA)
   project(RecStore LANGUAGES CXX CUDA C)

@@ -150,6 +150,16 @@ class RecStoreEmbeddingBagCollection(torch.nn.Module):
     def reset_trace(self):
         self._trace = []
 
+    def _append_trace(self, name: str, ids: torch.Tensor, grad: torch.Tensor) -> None:
+        ids_cpu = ids.detach().to(torch.int64).cpu()
+        grad_cpu = grad.detach().to(torch.float32).cpu()
+        if ids_cpu.numel() == 0:
+            return
+        unique_ids, inverse = torch.unique(ids_cpu, return_inverse=True)
+        grad_sum = torch.zeros((unique_ids.size(0), grad_cpu.size(1)), dtype=grad_cpu.dtype)
+        grad_sum.index_add_(0, inverse, grad_cpu)
+        self._trace.append((name, unique_ids, grad_sum))
+
     def set_fusion(self, enabled: bool):
         """Enable/disable fused embedding path at runtime."""
         self._enable_fusion = bool(enabled)
@@ -387,15 +397,7 @@ class RecStoreEmbeddingBagCollection(torch.nn.Module):
             all_embeddings.requires_grad_()
 
             def grad_hook_fused(grad, ids=fused_values_all, master_name=self._master_config.name):
-                ids_cpu = ids.detach().to(torch.int64).cpu()
-                grad_cpu = grad.detach().to(torch.float32).cpu()
-                if ids_cpu.numel() == 0:
-                    return
-                unique_ids, inverse = torch.unique(ids_cpu, return_inverse=True)
-                grad_sum = torch.zeros((unique_ids.size(0), grad_cpu.size(1)), dtype=grad_cpu.dtype)
-                grad_sum.index_add_(0, inverse, grad_cpu)
-                # Direct update in backward pass (backend handles LR scaling)
-                self.kv_client.update(name=master_name, ids=unique_ids, grads=grad_sum)
+                self._append_trace(master_name, ids, grad)
 
             all_embeddings.register_hook(grad_hook_fused)
 
@@ -503,15 +505,7 @@ class RecStoreEmbeddingBagCollection(torch.nn.Module):
                 all_embeddings.requires_grad_()
 
                 def grad_hook(grad, name=(self._master_config.name if self._enable_fusion else config_name), ids=ids_used):
-                    ids_cpu = ids.detach().to(torch.int64).cpu()
-                    grad_cpu = grad.detach().to(torch.float32).cpu()
-                    if ids_cpu.numel() == 0:
-                        return
-                    unique_ids, inverse = torch.unique(ids_cpu, return_inverse=True)
-                    grad_sum = torch.zeros((unique_ids.size(0), grad_cpu.size(1)), dtype=grad_cpu.dtype)
-                    grad_sum.index_add_(0, inverse, grad_cpu)
-                    # Direct update in backward pass (backend handles LR scaling)
-                    self.kv_client.update(name=name, ids=unique_ids, grads=grad_sum)
+                    self._append_trace(name, ids, grad)
                 all_embeddings.register_hook(grad_hook)
 
                 local_indices = torch.arange(len(values), device=values.device, dtype=torch.long)

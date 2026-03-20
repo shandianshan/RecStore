@@ -38,8 +38,27 @@ def _process_dist_embedding_module(mod: DistEmbedding, lr: float):
     mod.weight[unique_ids] = updated_weights
 
 def _process_generic_module_with_trace(mod: Any, lr: float, kv_client: Any):
-    """Handles the optimization step for a generic module - now a no-op as updates are moved to backward hooks."""
-    pass
+    """Handles sparse trace aggregation and backend updates for generic modules."""
+    if not mod._trace:
+        return
+
+    traces_by_name: Dict[str, List[Tuple[torch.Tensor, torch.Tensor]]] = {}
+    for name, ids, grads in mod._trace:
+        traces_by_name.setdefault(name, []).append((ids, grads))
+
+    for name, entries in traces_by_name.items():
+        all_ids = torch.cat([ids for ids, _ in entries], dim=0)
+        all_grads = torch.cat([grads for _, grads in entries], dim=0)
+
+        unique_ids, inverse_indices = torch.unique(all_ids, return_inverse=True)
+        summed_grads = torch.zeros(
+            (len(unique_ids), all_grads.size(1)),
+            device=all_grads.device,
+            dtype=all_grads.dtype,
+        )
+        summed_grads.index_add_(0, inverse_indices, all_grads)
+
+        kv_client.update(name=name, ids=unique_ids, grads=summed_grads)
 
 # --- Core Classes ---
 
@@ -95,3 +114,5 @@ class SparseSGD(SparseOptimizer):
                         _process_generic_module_with_trace(mod, lr, self.kv_client)
                     else:
                         print(f"Warning: Module type {type(mod).__name__} is not supported by SparseSGD optimizer.")
+                    if hasattr(mod, 'reset_trace'):
+                        mod.reset_trace()

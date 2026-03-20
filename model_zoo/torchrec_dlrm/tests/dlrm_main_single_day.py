@@ -560,6 +560,8 @@ def main(argv: List[str]) -> None:
             forward_time_total = 0.0
             backward_time_total = 0.0
             opt_time_total = 0.0
+            dense_opt_time_total = 0.0
+            sparse_opt_time_total = 0.0
             emb_time_total = 0.0
             nn_time_total = 0.0
             # Additional profiling
@@ -605,7 +607,6 @@ def main(argv: List[str]) -> None:
                 if use_cuda_timing:
                     fwd_start.record()
                 else:
-                    import time
                     t_fwd_start = time.time()
                 outputs = model(dense_features, sparse_features)
                 loss = criterion(outputs, labels.float())
@@ -632,27 +633,33 @@ def main(argv: List[str]) -> None:
                 else:
                     t_opt_start = time.time()
 
-                if dense_optimizer is not None:
-                    dense_optimizer.step()
-                
-                # Measure sparse update time implicitly if possible, or explicit via wrapping
-                # Since sparse_optimizer steps are effectively no-ops for EBC (updates in hook),
-                # we need to measure the hook execution. 
-                # The hook is executed during backward(). 
-                # So we can't separate backward compute from backward communication easily without modifying implementation.
-                # However, sparse_optimizer.step() handles the generic modules if any.
-                sparse_optimizer.step()
-
                 emb_ms = 0.0
                 nn_ms = 0.0
+                dense_opt_ms = 0.0
+                sparse_opt_ms = 0.0
                 raw_model = model.module if hasattr(model, "module") else model
 
                 if use_cuda_timing:
+                    torch.cuda.synchronize()
+                    t_dense_opt_start = time.time()
+                    if dense_optimizer is not None:
+                        dense_optimizer.step()
+                    torch.cuda.synchronize()
+                    t_dense_opt_end = time.time()
+
+                    torch.cuda.synchronize()
+                    t_sparse_opt_start = time.time()
+                    sparse_optimizer.step()
+                    torch.cuda.synchronize()
+                    t_sparse_opt_end = time.time()
+
                     opt_end.record()
                     torch.cuda.synchronize()
                     fwd_ms = fwd_start.elapsed_time(fwd_end)
                     bwd_ms = bwd_start.elapsed_time(bwd_end)
                     opt_ms = opt_start.elapsed_time(opt_end)
+                    dense_opt_ms = (t_dense_opt_end - t_dense_opt_start) * 1000.0
+                    sparse_opt_ms = (t_sparse_opt_end - t_sparse_opt_start) * 1000.0
                     
                     if hasattr(raw_model, "timings"):
                         events = raw_model.timings
@@ -661,10 +668,21 @@ def main(argv: List[str]) -> None:
                         dense2_ms = events["dense2_start"].elapsed_time(events["dense2_end"])
                         nn_ms = dense1_ms + dense2_ms
                 else:
+                    t_dense_opt_start = time.time()
+                    if dense_optimizer is not None:
+                        dense_optimizer.step()
+                    t_dense_opt_end = time.time()
+
+                    t_sparse_opt_start = time.time()
+                    sparse_optimizer.step()
+                    t_sparse_opt_end = time.time()
+
                     t_opt_end = time.time()
                     fwd_ms = (t_fwd_end - t_fwd_start) * 1000.0
                     bwd_ms = (t_bwd_end - t_bwd_start) * 1000.0
                     opt_ms = (t_opt_end - t_opt_start) * 1000.0
+                    dense_opt_ms = (t_dense_opt_end - t_dense_opt_start) * 1000.0
+                    sparse_opt_ms = (t_sparse_opt_end - t_sparse_opt_start) * 1000.0
                     
                     if hasattr(raw_model, "timings_cpu"):
                         emb_ms = raw_model.timings_cpu.get("sparse_ms", 0.0)
@@ -673,6 +691,8 @@ def main(argv: List[str]) -> None:
                 forward_time_total += fwd_ms
                 backward_time_total += bwd_ms
                 opt_time_total += opt_ms
+                dense_opt_time_total += dense_opt_ms
+                sparse_opt_time_total += sparse_opt_ms
                 emb_time_total += emb_ms
                 nn_time_total += nn_ms
                 
@@ -680,6 +700,8 @@ def main(argv: List[str]) -> None:
                 report_latency("Forward", fwd_ms)
                 report_latency("Backward", bwd_ms)
                 report_latency("Optimizer", opt_ms)
+                report_latency("DenseOptimizer", dense_opt_ms)
+                report_latency("SparseOptimizer", sparse_opt_ms)
                 report_latency("Embedding", emb_ms)
                 report_latency("Dense", nn_ms)
                 
@@ -704,7 +726,7 @@ def main(argv: List[str]) -> None:
                 
                 if batch_idx % 10 == 0:
                     pf_msg = f" PF_Wait(ms)={curr_pf_wait:.2f}" if prefetch_enabled else ""
-                    print(f"Batch {batch_idx}: Loss={loss.item():.4f} AUROC={auroc_score.item():.4f} FWD={fwd_ms:.2f} (Emb={emb_ms:.2f} NN={nn_ms:.2f}) BWD={bwd_ms:.2f} OPT={opt_ms:.2f}{pf_msg}")
+                    print(f"Batch {batch_idx}: Loss={loss.item():.4f} AUROC={auroc_score.item():.4f} FWD={fwd_ms:.2f} (Emb={emb_ms:.2f} NN={nn_ms:.2f}) BWD={bwd_ms:.2f} OPT={opt_ms:.2f} (DenseOPT={dense_opt_ms:.2f} SparseOPT={sparse_opt_ms:.2f}){pf_msg}")
             
             avg_train_loss = train_loss / num_batches
             avg_train_auroc = train_auroc / num_batches
@@ -712,10 +734,12 @@ def main(argv: List[str]) -> None:
             avg_fwd = forward_time_total / num_batches if num_batches else 0.0
             avg_bwd = backward_time_total / num_batches if num_batches else 0.0
             avg_opt = opt_time_total / num_batches if num_batches else 0.0
+            avg_dense_opt = dense_opt_time_total / num_batches if num_batches else 0.0
+            avg_sparse_opt = sparse_opt_time_total / num_batches if num_batches else 0.0
             avg_emb = emb_time_total / num_batches if num_batches else 0.0
             avg_nn = nn_time_total / num_batches if num_batches else 0.0
             avg_pf_wait = prefetch_wait_time_total / num_batches if num_batches else 0.0
-            print(f"Epoch {epoch + 1} - Training Loss: {avg_train_loss:.4f}, Training AUROC: {avg_train_auroc:.4f}, AvgFWD(ms): {avg_fwd:.2f} (Emb: {avg_emb:.2f} NN: {avg_nn:.2f}), AvgBWD(ms): {avg_bwd:.2f}, AvgOPT(ms): {avg_opt:.2f}, AvgPF_Wait(ms): {avg_pf_wait:.2f}")
+            print(f"Epoch {epoch + 1} - Training Loss: {avg_train_loss:.4f}, Training AUROC: {avg_train_auroc:.4f}, AvgFWD(ms): {avg_fwd:.2f} (Emb: {avg_emb:.2f} NN: {avg_nn:.2f}), AvgBWD(ms): {avg_bwd:.2f}, AvgOPT(ms): {avg_opt:.2f} (DenseOPT: {avg_dense_opt:.2f} SparseOPT: {avg_sparse_opt:.2f}), AvgPF_Wait(ms): {avg_pf_wait:.2f}")
             
             model.eval()
             val_loss = 0.0

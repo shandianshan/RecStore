@@ -1,11 +1,12 @@
 #include <torch/extension.h>
-#include "framework/op.h"
-#include "base/tensor.h"
+
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <string>
 
+#include "base/tensor.h"
+#include "framework/op.h"
 // Log level: 0=ERROR, 1=WARNING, 2=INFO, 3=DEBUG
 #include <glog/logging.h>
 
@@ -29,10 +30,10 @@ ToRecTensor(const torch::Tensor& tensor, base::DataType dtype) {
 }
 
 torch::Tensor emb_read_torch(const torch::Tensor& keys, int64_t embedding_dim) {
-  torch::Tensor cpu_keys = keys;
-  if (keys.is_cuda()) {
-    cpu_keys = keys.cpu();
-  }
+  bool is_cuda           = keys.is_cuda();
+  auto orig_device       = keys.device();
+  torch::Tensor cpu_keys = is_cuda ? keys.cpu() : keys;
+
   TORCH_CHECK(cpu_keys.dim() == 1, "Keys tensor must be 1-dimensional");
   TORCH_CHECK(cpu_keys.scalar_type() == torch::kInt64,
               "Keys tensor must have dtype int64");
@@ -42,30 +43,23 @@ torch::Tensor emb_read_torch(const torch::Tensor& keys, int64_t embedding_dim) {
   const int64_t num_keys = cpu_keys.size(0);
   if (num_keys == 0) {
     return torch::empty(
-        {0, embedding_dim}, cpu_keys.options().dtype(torch::kFloat32));
+        {0, embedding_dim}, torch::TensorOptions().dtype(torch::kFloat32));
   }
 
   auto op = GetKVClientOp();
 
-  auto values = torch::empty(
-      {num_keys, embedding_dim}, keys.options().dtype(torch::kFloat32));
-  torch::Tensor cpu_values = values;
-  if (values.is_cuda()) {
-    cpu_values = values.cpu();
-  }
-  TORCH_CHECK(cpu_values.is_contiguous(),
-              "Internal error: Created values tensor is not contiguous");
+  auto cpu_values = torch::empty(
+      {num_keys, embedding_dim}, torch::TensorOptions().dtype(torch::kFloat32));
 
   base::RecTensor rec_keys   = ToRecTensor(cpu_keys, base::DataType::UINT64);
   base::RecTensor rec_values = ToRecTensor(cpu_values, base::DataType::FLOAT32);
 
   op->EmbRead(rec_keys, rec_values);
 
-  if (values.is_cuda()) {
-    values.copy_(cpu_values);
+  if (is_cuda) {
+    return cpu_values.to(orig_device);
   }
-
-  return values;
+  return cpu_values;
 }
 
 // Async prefetch: returns a unique prefetch id (uint64_t)
@@ -112,7 +106,8 @@ emb_wait_result_torch(int64_t prefetch_id, int64_t embedding_dim) {
 
 void emb_update_torch(const torch::Tensor& keys, const torch::Tensor& grads) {
   throw std::runtime_error(
-      "emb_update_torch is deprecated. Use the Python-based sparse optimizer.");
+      "emb_update_torch is deprecated. Use the Python-based sparse "
+      "optimizer.");
 }
 
 void emb_update_table_torch(const std::string& table_name,

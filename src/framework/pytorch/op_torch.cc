@@ -30,7 +30,6 @@ ToRecTensor(const torch::Tensor& tensor, base::DataType dtype) {
 }
 
 torch::Tensor emb_read_torch(const torch::Tensor& keys, int64_t embedding_dim) {
-  recstore::ConfigureLogging();
   bool is_cuda           = keys.is_cuda();
   auto orig_device       = keys.device();
   torch::Tensor cpu_keys = is_cuda ? keys.cpu() : keys;
@@ -65,8 +64,6 @@ torch::Tensor emb_read_torch(const torch::Tensor& keys, int64_t embedding_dim) {
 
 // Async prefetch: returns a unique prefetch id (uint64_t)
 int64_t emb_prefetch_torch(const torch::Tensor& keys) {
-  recstore::ConfigureLogging();
-  // LOG(INFO) << "emb_prefetch_torch called";
   TORCH_CHECK(keys.dim() == 1, "Keys tensor must be 1-dimensional");
   TORCH_CHECK(keys.scalar_type() == torch::kInt64,
               "Keys tensor must have dtype int64");
@@ -88,36 +85,21 @@ int64_t emb_prefetch_torch(const torch::Tensor& keys) {
 // Wait for prefetch and return result tensor [N, embedding_dim] on CPU
 torch::Tensor
 emb_wait_result_torch(int64_t prefetch_id, int64_t embedding_dim) {
-  recstore::ConfigureLogging();
-  LOG(INFO) << "emb_wait_result_torch called: pid=" << prefetch_id
-            << ", dim=" << embedding_dim;
   TORCH_CHECK(embedding_dim > 0, "Embedding dimension must be positive");
   auto op = GetKVClientOp();
   op->WaitForPrefetch(static_cast<uint64_t>(prefetch_id));
-  std::vector<std::vector<float>> vecs;
-  op->GetPretchResult(static_cast<uint64_t>(prefetch_id), &vecs);
-  const int64_t L = static_cast<int64_t>(vecs.size());
+  std::vector<float> flat_values;
+  int64_t L = 0;
+  op->GetPretchResultFlat(
+      static_cast<uint64_t>(prefetch_id), &flat_values, &L, embedding_dim);
   auto options =
       torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCPU);
   auto out = torch::empty({L, embedding_dim}, options);
-  if (L > 0) {
-    float* dst = out.data_ptr<float>();
-    for (int64_t i = 0; i < L; ++i) {
-      const auto& row = vecs[i];
-      if (!row.empty()) {
-        const int64_t copy_d =
-            std::min<int64_t>(embedding_dim, static_cast<int64_t>(row.size()));
-        std::memcpy(
-            dst + i * embedding_dim, row.data(), sizeof(float) * copy_d);
-        if (copy_d < embedding_dim) {
-          std::memset(dst + i * embedding_dim + copy_d,
-                      0,
-                      sizeof(float) * (embedding_dim - copy_d));
-        }
-      } else {
-        std::memset(dst + i * embedding_dim, 0, sizeof(float) * embedding_dim);
-      }
-    }
+  if (L > 0 && !flat_values.empty()) {
+    std::memcpy(out.data_ptr<float>(),
+                flat_values.data(),
+                static_cast<size_t>(L) * static_cast<size_t>(embedding_dim) *
+                    sizeof(float));
   }
   return out;
 }
@@ -131,10 +113,6 @@ void emb_update_torch(const torch::Tensor& keys, const torch::Tensor& grads) {
 void emb_update_table_torch(const std::string& table_name,
                             const torch::Tensor& keys,
                             const torch::Tensor& grads) {
-  recstore::ConfigureLogging();
-  LOG(INFO) << "emb_update_table_torch called for table=" << table_name
-            << ", keys shape=" << keys.sizes()
-            << ", grads shape=" << grads.sizes();
   TORCH_CHECK(!table_name.empty(), "table_name must be non-empty");
   TORCH_CHECK(keys.dim() == 1, "Keys tensor must be 1-dimensional");
   TORCH_CHECK(keys.scalar_type() == torch::kInt64,
@@ -149,7 +127,6 @@ void emb_update_table_torch(const std::string& table_name,
               "Keys and grads tensors must have the same number of entries");
 
   if (keys.size(0) == 0) {
-    LOG(INFO) << "emb_update_table_torch: num_keys==0, early return";
     return;
   }
 
@@ -158,29 +135,21 @@ void emb_update_table_torch(const std::string& table_name,
   torch::Tensor cpu_keys  = keys;
   torch::Tensor cpu_grads = grads;
   if (keys.is_cuda()) {
-    LOG(INFO) << "emb_update_table_torch: copying GPU keys to CPU";
     cpu_keys = keys.cpu();
   }
   if (grads.is_cuda()) {
-    LOG(INFO) << "emb_update_table_torch: copying GPU grads to CPU";
     cpu_grads = grads.cpu();
   }
 
   base::RecTensor rec_keys  = ToRecTensor(cpu_keys, base::DataType::UINT64);
   base::RecTensor rec_grads = ToRecTensor(cpu_grads, base::DataType::FLOAT32);
 
-  LOG(INFO) << "emb_update_table_torch: calling op->EmbUpdate";
   op->EmbUpdate(table_name, rec_keys, rec_grads);
-  LOG(INFO) << "emb_update_table_torch: EmbUpdate done";
 }
 
 bool init_embedding_table_torch(const std::string& table_name,
                                 int64_t num_embeddings,
                                 int64_t embedding_dim) {
-  recstore::ConfigureLogging();
-  LOG(INFO) << "init_embedding_table_torch called for table=" << table_name
-            << ", num_embeddings=" << num_embeddings
-            << ", embedding_dim=" << embedding_dim;
   TORCH_CHECK(!table_name.empty(), "table_name must be non-empty");
   TORCH_CHECK(num_embeddings > 0, "num_embeddings must be positive");
   TORCH_CHECK(embedding_dim > 0, "embedding_dim must be positive");
@@ -194,10 +163,6 @@ bool init_embedding_table_torch(const std::string& table_name,
 }
 
 void emb_write_torch(const torch::Tensor& keys, const torch::Tensor& values) {
-  recstore::ConfigureLogging();
-  LOG(INFO) << "emb_write_torch called: keys shape=" << keys.sizes()
-            << ", values shape=" << values.sizes() << ", keys device="
-            << keys.device() << ", values device=" << values.device();
   TORCH_CHECK(keys.dim() == 1, "Keys tensor must be 1-dimensional");
   TORCH_CHECK(keys.scalar_type() == torch::kInt64,
               "Keys tensor must have dtype int64");
@@ -210,7 +175,6 @@ void emb_write_torch(const torch::Tensor& keys, const torch::Tensor& values) {
               "Keys and Values tensors must have the same number of entries");
 
   if (keys.size(0) == 0) {
-    LOG(INFO) << "emb_write_torch: num_keys==0, early return";
     return;
   }
 
@@ -219,25 +183,19 @@ void emb_write_torch(const torch::Tensor& keys, const torch::Tensor& values) {
   torch::Tensor cpu_keys   = keys;
   torch::Tensor cpu_values = values;
   if (keys.is_cuda()) {
-    LOG(INFO) << "emb_write_torch: copying GPU keys to CPU";
     cpu_keys = keys.cpu();
   }
   if (values.is_cuda()) {
-    LOG(INFO) << "emb_write_torch: copying GPU values to CPU";
     cpu_values = values.cpu();
   }
 
   base::RecTensor rec_keys   = ToRecTensor(cpu_keys, base::DataType::UINT64);
   base::RecTensor rec_values = ToRecTensor(cpu_values, base::DataType::FLOAT32);
 
-  LOG(INFO) << "emb_write_torch: calling op->EmbWrite";
   op->EmbWrite(rec_keys, rec_values);
-  LOG(INFO) << "emb_write_torch: EmbWrite done";
 }
 
 void set_ps_config_torch(const std::string& host, int64_t port) {
-  recstore::ConfigureLogging();
-  LOG(INFO) << "set_ps_config_torch called: host=" << host << " port=" << port;
   auto op    = GetKVClientOp();
   auto kv_op = std::dynamic_pointer_cast<KVClientOp>(op);
   if (kv_op) {

@@ -46,5 +46,6 @@
         "host": "127.0.0.1",
         "port": 15000,
         "shard": 1
-    }
+    },
+    "report_API": "http://127.0.0.1:8081/report"
 }

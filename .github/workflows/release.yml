@@ -1,33 +1,71 @@
-name: Manual Release
+name: Release
 
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: Release version tag, for example v0.1.0
-        required: true
-        type: string
-      release_name:
-        description: Optional GitHub Release display name
-        required: false
-        type: string
-      prerelease:
-        description: Mark this release as a prerelease
-        required: false
-        default: false
-        type: boolean
+  push:
+    tags:
+      - "v*"
+  schedule:
+    - cron: "0 15 * * 0"
 
 permissions:
   actions: read
   contents: write
 
 jobs:
+  prepare-release:
+    name: Prepare Release Metadata
+    runs-on: ubuntu-latest
+    outputs:
+      should_publish: ${{ steps.meta.outputs.should_publish }}
+      version: ${{ steps.meta.outputs.version }}
+      release_name: ${{ steps.meta.outputs.release_name }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute release metadata
+        id: meta
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            VERSION="${GITHUB_REF_NAME}"
+            RELEASE_NAME="${GITHUB_REF_NAME}"
+            PRERELEASE="false"
+            SHOULD_PUBLISH="true"
+          else
+            WEEKLY_VERSION="weekly-$(date -u +%Y%m%d)"
+            WEEKLY_NAME="Weekly Pre-release $(date -u +%Y-%m-%d)"
+            RECENT_COMMITS="$(git rev-list --count --since='7 days ago' HEAD)"
+            VERSION="${WEEKLY_VERSION}"
+            RELEASE_NAME="${WEEKLY_NAME}"
+            PRERELEASE="true"
+            SHOULD_PUBLISH="false"
+            if [ "${RECENT_COMMITS}" -gt 0 ]; then
+              SHOULD_PUBLISH="true"
+            fi
+          fi
+
+          echo "should_publish=${SHOULD_PUBLISH}" >> "${GITHUB_OUTPUT}"
+          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "release_name=${RELEASE_NAME}" >> "${GITHUB_OUTPUT}"
+          echo "prerelease=${PRERELEASE}" >> "${GITHUB_OUTPUT}"
+          echo "Resolved release metadata:"
+          echo "  should_publish=${SHOULD_PUBLISH}"
+          echo "  version=${VERSION}"
+          echo "  release_name=${RELEASE_NAME}"
+          echo "  prerelease=${PRERELEASE}"
+
   build-and-release:
     name: Build, Verify, and Publish Release
+    needs: prepare-release
+    if: needs.prepare-release.outputs.should_publish == 'true'
     runs-on: ubuntu-latest
     env:
       TORCH_VERSION: "2.5.0"
-      RELEASE_VERSION: "${{ inputs.version }}"
+      RELEASE_VERSION: "${{ needs.prepare-release.outputs.version }}"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -172,34 +210,37 @@ jobs:
           set -euo pipefail
           pkill -f ps_server || true
 
-      - name: Write release notes
-        run: |
-          set -euo pipefail
-          cat > build/release-notes.md <<EOF
-          CPU release artifacts for RecStore ${RELEASE_VERSION}.
-
-          Included assets:
-          - ps_server package for Linux x86_64
-          - recstore_ops package for Linux x86_64
-          - ycsb package for Linux x86_64
-          - Matching PyTorch wheel built in CI
-
-          Notes:
-          - These packages intentionally exclude host-provided runtime libraries such as glibc and the system loader.
-          - Recommended target environments are Ubuntu 20.04/22.04 or similar Linux distributions with a compatible userspace.
-          - Install runtime prerequisites with bash ci/env/init_host_prereqs.sh before use.
-          EOF
+      - name: Generate release notes
+        id: git-cliff
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: .github/cliff.toml
+          args: --verbose --unreleased --tag "${{ needs.prepare-release.outputs.version }}" --strip header
+        env:
+          OUTPUT: build/release-notes.md
+          GITHUB_REPO: ${{ github.repository }}
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: "${{ inputs.version }}"
-          name: "${{ inputs.release_name != '' && inputs.release_name || inputs.version }}"
+          tag_name: "${{ needs.prepare-release.outputs.version }}"
+          name: "${{ needs.prepare-release.outputs.release_name }}"
           body_path: build/release-notes.md
-          prerelease: "${{ inputs.prerelease }}"
+          prerelease: "${{ needs.prepare-release.outputs.prerelease }}"
           fail_on_unmatched_files: true
           files: |
-            build/recstore-${{ inputs.version }}-linux-x86_64-ps_server.tar.gz
-            build/recstore-${{ inputs.version }}-linux-x86_64-recstore_ops.tar.gz
-            build/recstore-${{ inputs.version }}-linux-x86_64-ycsb.tar.gz
+            build/recstore-${{ needs.prepare-release.outputs.version }}-linux-x86_64-ps_server.tar.gz
+            build/recstore-${{ needs.prepare-release.outputs.version }}-linux-x86_64-recstore_ops.tar.gz
+            build/recstore-${{ needs.prepare-release.outputs.version }}-linux-x86_64-ycsb.tar.gz
             binary/torch-${{ env.TORCH_VERSION }}*linux_x86_64.whl
+
+  skip-no-changes:
+    name: Skip Weekly Pre-release
+    needs: prepare-release
+    if: needs.prepare-release.outputs.should_publish != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Explain skip
+        run: |
+          echo "No commits were found in the last 7 days."
+          echo "Weekly pre-release build is skipped."

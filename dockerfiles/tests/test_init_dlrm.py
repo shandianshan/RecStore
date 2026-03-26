@@ -4,7 +4,8 @@ import unittest
 
 class InitDlrmScriptTest(unittest.TestCase):
     def test_builds_torchrec_stack_from_source_against_installed_torch(self) -> None:
-        script = pathlib.Path('dockerfiles/init_dlrm.sh').read_text()
+        repo_root = pathlib.Path(__file__).resolve().parents[2]
+        script = (repo_root / 'dockerfiles' / 'init_dlrm.sh').read_text()
 
         self.assertNotIn('pip install fbgemm-gpu==1.0', script)
         self.assertNotIn('pip install torchrec==1.0', script)
@@ -18,6 +19,10 @@ class InitDlrmScriptTest(unittest.TestCase):
         self.assertIn('setup.py bdist_wheel', script)
         self.assertIn('--no-deps dist/*.whl', script)
         self.assertIn('patchelf --add-needed libtbb.so.12', script)
+        self.assertIn('importlib.util.find_spec("fbgemm_gpu")', script)
+        self.assertIn('export USE_CXX11_ABI="${TORCH_CXX11_ABI}"', script)
+        self.assertIn('-D_GLIBCXX_USE_CXX11_ABI=${TORCH_CXX11_ABI}', script)
+        self.assertNotIn('/home/shq/', script)
         self.assertIn('FBGEMM_REF="${FBGEMM_REF:-v1.1.2}"', script)
         self.assertIn('TORCHREC_REF="${TORCHREC_REF:-v1.1.0}"', script)
 

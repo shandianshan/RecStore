@@ -95,6 +95,7 @@ echo "Detected torch cuda: ${TORCH_CUDA_VERSION}"
 echo "Detected torch cxx11abi: ${TORCH_CXX11_ABI}"
 
 echo "Building TorchRec stack from source against the current torch install"
+echo "Aligning extension builds with torch cxx11abi=${TORCH_CXX11_ABI}"
 mkdir -p "$WORKSPACE_ROOT"
 FBGEMM_SRC_DIR="$WORKSPACE_ROOT/FBGEMM"
 TORCHREC_SRC_DIR="$WORKSPACE_ROOT/torchrec"
@@ -110,7 +111,9 @@ BIN_DIR = "${NINJA_BIN%/*}"
 EOF
 export PYTHONPATH="$NINJA_SHIM_ROOT:${PYTHONPATH:-}"
 echo "Using ninja binary: ${NINJA_BIN}"
-export CMAKE_ARGS="-DCMAKE_MAKE_PROGRAM:FILEPATH=${NINJA_BIN} ${CMAKE_ARGS:-}"
+export USE_CXX11_ABI="${TORCH_CXX11_ABI}"
+export CXXFLAGS="-D_GLIBCXX_USE_CXX11_ABI=${TORCH_CXX11_ABI} ${CXXFLAGS:-}"
+export CMAKE_ARGS="-DCMAKE_MAKE_PROGRAM:FILEPATH=${NINJA_BIN} -D_GLIBCXX_USE_CXX11_ABI=${TORCH_CXX11_ABI} ${CMAKE_ARGS:-}"
 "$PYTHON_BIN" -m pip uninstall -y torchrec fbgemm-gpu fbgemm_gpu || true
 
 ensure_repo "$FBGEMM_REPO" "$FBGEMM_REF" "$FBGEMM_SRC_DIR"
@@ -124,7 +127,29 @@ rm -rf _skbuild build dist
 "$PYTHON_BIN" setup.py bdist_wheel
 "$PYTHON_BIN" -m pip install --force-reinstall --no-deps dist/*.whl
 "$PYTHON_BIN" -m pip install --force-reinstall "numpy<2"
-patchelf --add-needed libtbb.so.12 /home/shq/.local/lib/python3.10/site-packages/fbgemm_gpu/fbgemm_gpu_py.so || true
+if ! command -v patchelf >/dev/null 2>&1; then
+    echo "patchelf is required to patch fbgemm_gpu dependencies" >&2
+    exit 1
+fi
+FBGEMM_SO_PATH="$("$PYTHON_BIN" - <<'PY'
+import importlib.util
+from pathlib import Path
+
+spec = importlib.util.find_spec("fbgemm_gpu")
+if spec is None or spec.origin is None:
+    raise SystemExit("Unable to locate installed fbgemm_gpu package")
+
+pkg_dir = Path(spec.origin).resolve().parent
+so_path = pkg_dir / "fbgemm_gpu_py.so"
+if not so_path.exists():
+    raise SystemExit(f"Unable to locate fbgemm_gpu_py.so under {pkg_dir}")
+
+print(so_path)
+PY
+)"
+if ! patchelf --print-needed "$FBGEMM_SO_PATH" | grep -Fx 'libtbb.so.12' >/dev/null 2>&1; then
+    patchelf --add-needed libtbb.so.12 "$FBGEMM_SO_PATH"
+fi
 popd
 
 pushd "$TORCHREC_SRC_DIR"

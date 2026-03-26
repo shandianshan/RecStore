@@ -18,15 +18,15 @@
 #include "storage/ssd/io_backend.h"
 #include "storage/ssd/io_backend_factory.h"
 
-static inline Value_t PackPageValue(PageID_t start_page_id, uint16_t page_count) {
-      return (uint64_t(page_count) << 48) | (start_page_id & 0x0000FFFFFFFFFFFF);                           
+static inline Value_t
+PackPageValue(PageID_t start_page_id, uint16_t page_count) {
+  return (uint64_t(page_count) << 48) | (start_page_id & 0x0000FFFFFFFFFFFF);
 }
-static inline void UnpackPageValue(Value_t v, PageID_t& start_page_id, uint16_t& page_count) {          
-  page_count    = uint16_t(v >> 48);                                                                    
+static inline void
+UnpackPageValue(Value_t v, PageID_t& start_page_id, uint16_t& page_count) {
+  page_count    = uint16_t(v >> 48);
   start_page_id = v & 0x0000FFFFFFFFFFFF;
-}                                                                                                       
-     
-
+}
 
 class KVEngineCCEH : public BaseKV {
   static constexpr int kKVEngineValidFileSize = 123;
@@ -48,15 +48,15 @@ public:
     // by CCEHKVClientImpl::init_data to carve out non-overlapping zones.
     // For io_uring these are ignored (each table uses its own file).
     PageID_t index_offset = 0;
-    PageID_t value_offset = 1;  // io_uring: start at page 1 (page 0 unused)
+    PageID_t value_offset = 1; // io_uring: start at page 1 (page 0 unused)
     if (backend_type == BackendType::SPDK) {
-      index_offset = config.json_config_.value("spdk_index_offset",
-                                               (uint64_t)0);
-      value_offset = config.json_config_.value("spdk_value_offset",
-                                               (uint64_t)1000000);
+      index_offset =
+          config.json_config_.value("spdk_index_offset", (uint64_t)0);
+      value_offset =
+          config.json_config_.value("spdk_value_offset", (uint64_t)1000000);
     }
-    IOConfig io_config_index{backend_type, queue_cnt_, index_db_path,
-                             index_offset};
+    IOConfig io_config_index{
+        backend_type, queue_cnt_, index_db_path, index_offset};
 
     hash_table_ = new CCEH(io_config_index);
     IOConfig io_config_value{
@@ -102,8 +102,8 @@ public:
   void Put(const uint64_t key,
            const std::string_view& value,
            unsigned tid) override {
-    uint32_t actual_size  = (uint32_t)value.size();
-    uint16_t pages_needed = (actual_size + 4 + PAGE_SIZE - 1) / PAGE_SIZE;
+    uint32_t actual_size   = (uint32_t)value.size();
+    uint16_t pages_needed  = (actual_size + 4 + PAGE_SIZE - 1) / PAGE_SIZE;
     PageID_t start_page_id = 0;
     uint32_t written       = 0;
     for (int i = 0; i < pages_needed; i++) {
@@ -176,14 +176,14 @@ public:
     int ri = 0; // index into read_entries
     for (int i = 0; i < size; i++) {
       if (ri < (int)valid_indices.size() && valid_indices[ri] == i) {
-        char* buf      = read_entries[ri].buffer;
+        char* buf            = read_entries[ri].buffer;
         uint32_t actual_size = 0;
         memcpy(&actual_size, buf, 4);
         value_buffers.emplace_back(actual_size / sizeof(float));
         memcpy((char*)value_buffers.back().data(), buf + 4, actual_size);
         value_io_backend->FreeBuffer(buf);
-        values->emplace_back(value_buffers.back().data(),
-                             value_buffers.back().size());
+        values->emplace_back(
+            value_buffers.back().data(), value_buffers.back().size());
         ri++;
       } else {
         values->emplace_back();
@@ -202,8 +202,8 @@ public:
     std::vector<uint16_t> page_counts(n);
     for (int i = 0; i < n; i++) {
       uint32_t actual_size = (*values)[i].Size() * sizeof(float);
-      page_counts[i] = (actual_size + 4 + PAGE_SIZE - 1) / PAGE_SIZE;
-      start_page_ids[i] = value_io_backend->GetNextPageID();
+      page_counts[i]       = (actual_size + 4 + PAGE_SIZE - 1) / PAGE_SIZE;
+      start_page_ids[i]    = value_io_backend->GetNextPageID();
       value_io_backend->SetNextPageID(start_page_ids[i] + page_counts[i]);
     }
 
@@ -225,8 +225,8 @@ public:
     // Phase 3: CCEH index inserts with packed value
     for (int j = 0; j < n; j++) {
       Key_t hash_key = keys[j];
-      hash_table_->Insert(hash_key,
-                          PackPageValue(start_page_ids[j], page_counts[j]));
+      hash_table_->Insert(
+          hash_key, PackPageValue(start_page_ids[j], page_counts[j]));
     }
   }
 

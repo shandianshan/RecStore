@@ -240,11 +240,11 @@ TEST_F(KVEngineCCEHTest, VariableValueSize_PutGet) {
   //   == 2048 floats (8192B) → 2页
   //   == 12800 floats (51200B) → 13页，对应 ml20m 场景
   const std::vector<std::pair<int, std::string>> cases = {
-      {16,    "small 64B"},
-      {32,    "default 128B"},
-      {1023,  "exactly fills one page"},
-      {1024,  "just spills to two pages"},
-      {2048,  "two full pages"},
+      {16, "small 64B"},
+      {32, "default 128B"},
+      {1023, "exactly fills one page"},
+      {1024, "just spills to two pages"},
+      {2048, "two full pages"},
       {12800, "ml20m scenario 51200B"},
   };
 

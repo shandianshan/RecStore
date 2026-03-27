@@ -18,7 +18,19 @@ DLRM 使用的数据集为 [Criteo Kaggle Display Advertising Challenge Dataset]
 bash scripts/process_single_day.sh ./partial_data ./processed_day_0_data > process.log 2>&1
 ```
 
-来完成数据集的加载，随后可以直接进行训练：
+来完成数据集的加载，随后可以直接进行训练。
+
+在运行前，请确认全局 Python 环境已经安装：
+
+```bash
+python3 -c "import torch, torchrec, fbgemm_gpu, torchmetrics; print(torch.__version__, torch.version.cuda, torch.compiled_with_cxx11_abi())"
+```
+
+推荐输出：
+
+```text
+2.7.1+cu118 11.8 True
+```
 
 === "RecStore"
     ```bash

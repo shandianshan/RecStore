@@ -9,6 +9,7 @@
 #include <condition_variable>
 #include <filesystem>
 #include <fstream>
+#include <cstdlib>
 
 #include <chrono>
 
@@ -45,6 +46,51 @@ static std::string GetApiUrl() {
   }
   return default_url;
 }
+
+namespace {
+
+enum class ReportMode {
+  kRemote,
+  kLocal,
+};
+
+bool ParseLocalReportMode(const std::string& value) {
+  return value == "local" || value == "off" || value == "disable" ||
+         value == "disabled" || value == "false" || value == "0";
+}
+
+bool ParseRemoteReportMode(const std::string& value) {
+  return value == "grafana" || value == "remote" || value == "on" ||
+         value == "true" || value == "1";
+}
+
+ReportMode ResolveReportMode() {
+  if (const char* env_mode = std::getenv("RECSTORE_REPORT_MODE");
+      env_mode != nullptr) {
+    const std::string mode(env_mode);
+    if (ParseLocalReportMode(mode)) {
+      return ReportMode::kLocal;
+    }
+    if (ParseRemoteReportMode(mode)) {
+      return ReportMode::kRemote;
+    }
+    LOG(WARNING) << "Unknown RECSTORE_REPORT_MODE=" << mode
+                 << ", fallback to report_API based behavior.";
+  }
+
+  const std::string api_url = GetApiUrl();
+  if (api_url.empty()) {
+    return ReportMode::kLocal;
+  }
+
+  return ReportMode::kRemote;
+}
+
+bool IsRemoteReportEnabled() {
+  return ResolveReportMode() == ReportMode::kRemote;
+}
+
+}  // namespace
 
 size_t write_callback(void* contents, size_t size, size_t nmemb, void* userp) {
   ((std::string*)userp)->append((char*)contents, size * nmemb);
@@ -152,8 +198,16 @@ private:
 };
 
 bool send_json_request(const std::string& json_payload) {
+  if (!IsRemoteReportEnabled()) {
+    DLOG(INFO) << "REPORT_LIB INFO: Remote reporting disabled; drop payload.";
+    return true;
+  }
   AsyncReportQueue::GetInstance().Enqueue(json_payload);
   return true;
+}
+
+bool is_report_remote_enabled_for_test() {
+  return IsRemoteReportEnabled();
 }
 
 extern "C" bool

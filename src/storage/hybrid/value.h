@@ -1,15 +1,12 @@
 #pragma once
 
 #include "../../memory/persist_malloc.h"
-#include "../../memory/r2_malloc.h"
 #include "pointer.h"
 #include "index.h"
-#include "../dram/extendible_hash.h"
-
+#include "storage/kv_engine/base_kv.h"
 #include <string>
 #include <string_view>
 #include <vector>
-#include <deque>
 #include <limits>
 #include <atomic>
 #include <thread>
@@ -25,7 +22,6 @@
 #include <array>
 #include <functional>
 #include <cstdint>
-
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -82,12 +78,12 @@ public:
                size_t shm_capacity,
                const std::string& ssd_file_path,
                size_t ssd_capacity,
-               const IndexConfig& index_config)
+               const BaseKVConfig& index_config)
       : shm_manage(shm_file_path, shm_capacity, "DRAM"),
         ssd_manage(ssd_file_path, ssd_capacity, "SSD"),
         lru_(std::max<size_t>(4096, shm_capacity / 256)),
         shm_capacity_bytes_(shm_capacity) {
-    using IndexF = base::Factory<Index, const IndexConfig&>;
+    using IndexF = base::Factory<Index, const BaseKVConfig&>;
     std::string index_type =
         index_config.json_config_.value("index_type", "DRAM");
     index.reset(IndexF::NewInstance(index_type, index_config));

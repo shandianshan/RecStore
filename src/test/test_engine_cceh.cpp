@@ -20,8 +20,10 @@ protected:
         {"path", test_dir_},
         {"capacity", 100000},
         {"value_size", 128},
-        {"type", "IOURING"},
-        {"queue_size", 512}};
+        {"io_backend_type", "IOURING"},
+        {"queue_cnt", 512},
+        {"page_id_offset", 0},
+        {"file_path", test_dir_ + "/cceh.db"}};
     kv_engine_ = std::make_unique<KVEngineCCEH>(config_);
   }
 
@@ -181,7 +183,7 @@ TEST_F(KVEngineCCEHTest, ConcurrentBatchGet) {
 
 // BatchPut写入 + BatchGet读回，用float数据做roundtrip验证
 TEST_F(KVEngineCCEHTest, BatchPutAndBatchGet) {
-  const int num_keys = 256;
+  const int num_keys       = 256;
   const int floats_per_key = 128 / sizeof(float); // value_size=128 → 32 floats
 
   // 构造每个key对应的float数据，key i 的第 j 个float = i * 100.0f + j

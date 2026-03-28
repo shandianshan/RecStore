@@ -4,13 +4,12 @@
 #include <algorithm>
 #include <atomic>
 #include <fcntl.h>
-#include <thread>
 #include "spdk/env.h"
 #include "spdk/nvme.h"
-#include "spdk/vmd.h"
 #include "spdk/env.h"
 #include "spdk/nvme.h"
-#include "spdk/vmd.h"
+#include "base/factory.h"
+#include "storage/kv_engine/base_kv.h"
 
 static const char* pcie_address = "0000:8d:00.0";
 
@@ -155,7 +154,7 @@ private:
   }
 
 public:
-  SpdkBackend(IOConfig& config) : IOBackend(config){};
+  SpdkBackend(const BaseKVConfig& config) : IOBackend(config) {};
   ~SpdkBackend() {
     if (controller_active_.load(std::memory_order_acquire)) {
       int remaining =
@@ -177,10 +176,8 @@ public:
       opts.hugepage_single_segments = 1;
       opts.hugedir                  = "/dev/hugepages-2M";
       trid                          = {};
-      LOG(INFO) << "0";
       spdk_nvme_trid_populate_transport(&trid, SPDK_NVME_TRANSPORT_PCIE);
       snprintf(trid.subnqn, sizeof(trid.subnqn), "%s", SPDK_NVMF_DISCOVERY_NQN);
-      LOG(INFO) << "0.5";
       LOG(INFO) << "pcie_address: " << pcie_address;
       LOG(INFO) << "sizeof(trid.traddr): " << sizeof(trid.traddr);
       snprintf(trid.traddr, sizeof(trid.traddr), "%s", pcie_address);
@@ -188,11 +185,8 @@ public:
       LOG(INFO) << "trid.traddr: " << trid.traddr;
       LOG(INFO) << "trid.subnqn: " << trid.subnqn;
       LOG(INFO) << "sizeof(spdk_env_opts): " << sizeof(spdk_env_opts);
-      LOG(INFO) << "spdk_nvme_trid_populate_transport: "
-                << spdk_nvme_trid_populate_transport;
 
       CHECK(spdk_env_init(&opts) >= 0) << "Unable to initialize SPDK env\n";
-      LOG(INFO) << "1";
       CHECK_EQ(spdk_nvme_probe(&trid, this, probe_cb, attach_cb, NULL), 0)
           << "Failed to probe NVMe device";
       CHECK_NE(ns_entry.ns, nullptr) << "Namespace is not initialized";
@@ -200,11 +194,8 @@ public:
       shared_ns_entry_   = ns_entry;
       shared_empty_page_ = (char*)spdk_zmalloc(
           PAGE_SIZE, 64, NULL, SPDK_ENV_SOCKET_ID_ANY, SPDK_MALLOC_DMA);
-      LOG(INFO) << "2";
       CHECK_NE(shared_empty_page_, nullptr) << "Failed to allocate empty page";
-      LOG(INFO) << "3";
       empty_page = shared_empty_page_;
-      LOG(INFO) << "4";
       controller_active_.store(true, std::memory_order_release);
       env_initialized_ = true;
       LOG(INFO) << "env initialized successfully" << std::endl;
@@ -434,3 +425,5 @@ public:
     }
   }
 };
+
+FACTORY_REGISTER(IOBackend, SPDK, SpdkBackend, const BaseKVConfig&);

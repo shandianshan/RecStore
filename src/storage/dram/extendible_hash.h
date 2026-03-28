@@ -1,12 +1,14 @@
 #pragma once
 
-#include "hash_interface.h"
-#include "pair.h"
 #include <cstring>
 #include "../hybrid/index.h"
-// #include "/home/nammh/quartz/src/lib/pmalloc.h"
 #include "base/factory.h"
+#include "storage/kv_engine/base_kv.h"
 #define LSB
+#define CAS(_p, _u, _v)                                                        \
+  (__atomic_compare_exchange_n(                                                \
+      _p, _u, _v, false, __ATOMIC_ACQUIRE, __ATOMIC_ACQUIRE))
+
 const size_t kMask  = 256 - 1;
 const size_t kShift = 8;
 
@@ -94,64 +96,38 @@ struct Directory {
   void LSBUpdate(int, int, int, int, Block**);
 };
 
-class ExtendibleHash : public Index, public Hash {
+class ExtendibleHash : public Index {
 public:
-  ExtendibleHash(const IndexConfig& config);
-  ExtendibleHash(void);
-  ExtendibleHash(size_t);
-  ~ExtendibleHash(void);
-  void Insert(Key_t&, Value_t);
-  bool InsertOnly(Key_t&, Value_t);
-  bool Delete(Key_t&);
-  Value_t Get(Key_t&);
-  Value_t FindAnyway(Key_t&);
-  void Insert(const Key_t& key, Value_t value);
-  bool InsertOnly(const Key_t& key, Value_t value);
-  Value_t Get(const Key_t& key);
-  double Utilization(void);
-  size_t Capacity(void);
-
-  void* operator new(size_t size) {
-    void* ret;
-    posix_memalign(&ret, 64, size);
-    // ret = pmalloc(size);
-    return ret;
-  }
-  // From Index
-  void Util() override;
-
-  void Get(const uint64_t key, uint64_t& value, unsigned tid) override;
-  void Put(const uint64_t key, uint64_t value, unsigned tid) override;
-
-  void BatchPut(coroutine<void>::push_type& sink,
-                base::ConstArray<uint64_t> keys,
-                uint64_t* pointers,
+  ExtendibleHash(const BaseKVConfig& config);
+  ~ExtendibleHash();
+  bool Delete(Key_t&) override;
+  double Utilization(void) override;
+  size_t Capacity(void) override;
+  void Get(Key_t key, Value_t& value, unsigned tid) override;
+  void Put(Key_t key, Value_t value, unsigned tid) override;
+  void BatchGet(base::ConstArray<Key_t> keys,
+                Value_t* pointers,
                 unsigned tid) override;
-
-  void BatchGet(base::ConstArray<uint64_t> keys,
-                uint64_t* pointers,
+  void BatchPut(base::ConstArray<Key_t> keys,
+                Value_t* pointers,
                 unsigned tid) override;
-
-  void BatchGet(coroutine<void>::push_type& sink,
-                base::ConstArray<uint64_t> keys,
-                uint64_t* pointers,
-                unsigned tid) override;
-
-  void DebugInfo() const override;
-
-  void BulkLoad(base::ConstArray<uint64_t> keys, const void* value) override;
-
-  void LoadFakeData(int64_t key_capacity, int value_size) override;
-
-  void clear() override;
 
   void operator delete(void* p) noexcept { std::free(p); }
   void operator delete(void* p, std::size_t) noexcept { std::free(p); }
-  // std::string RetrieveValue(uint64_t raw_value) override;
+  void* operator new(size_t size) {
+    void* ret;
+    posix_memalign(&ret, 64, size);
+    return ret;
+  }
 
 private:
   Directory dir;
   size_t global_depth;
+
+  Value_t Extract(Key_t& key);
+  void Insert(Key_t& key, Value_t value);
+  bool InsertOnly(Key_t& key, Value_t value);
+  Value_t FindAnyway(Key_t&);
 };
 
-FACTORY_REGISTER(Index, DRAM, ExtendibleHash, const IndexConfig&);
+FACTORY_REGISTER(Index, DRAM, ExtendibleHash, const BaseKVConfig&);

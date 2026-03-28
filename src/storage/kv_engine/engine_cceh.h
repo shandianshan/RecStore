@@ -14,9 +14,7 @@
 #include "base/factory.h"
 #include "base_kv.h"
 #include "memory/persist_malloc.h"
-#include "pair.h"
-#include "storage/ssd/io_backend.h"
-#include "storage/ssd/io_backend_factory.h"
+#include "../io_backend/io_backend.h"
 
 static inline Value_t
 PackPageValue(PageID_t start_page_id, uint16_t page_count) {
@@ -33,15 +31,14 @@ class KVEngineCCEH : public BaseKV {
 
 public:
   KVEngineCCEH(const BaseKVConfig& config) : BaseKV(config) {
-    queue_cnt_ = config.json_config_.at("queue_size").get<int>();
-    type       = config.json_config_.at("type").get<std::string>();
+    queue_cnt_ = config.json_config_.at("queue_cnt").get<int>();
+    std::string io_backend_type =
+        config.json_config_.at("io_backend_type").get<std::string>();
     LOG(INFO) << "--------------init KVEngineCCEH--------------------";
     std::string index_path = config.json_config_.at("path").get<std::string>();
     std::string index_db_path = index_path + "/cceh_test.db";
     std::string value_path = config.json_config_.at("path").get<std::string>();
     std::string value_db_path = value_path + "/cceh_value.db";
-    BackendType backend_type =
-        (type == "SPDK") ? BackendType::SPDK : BackendType::IOURING;
 
     // Per-table LBA offsets for SPDK (raw NVMe device shared by all tables).
     // json_config_ may carry "spdk_index_offset" and "spdk_value_offset" set
@@ -49,26 +46,29 @@ public:
     // For io_uring these are ignored (each table uses its own file).
     PageID_t index_offset = 0;
     PageID_t value_offset = 1; // io_uring: start at page 1 (page 0 unused)
-    if (backend_type == BackendType::SPDK) {
+    if (io_backend_type == "SPDK") {
       index_offset =
           config.json_config_.value("spdk_index_offset", (uint64_t)0);
       value_offset =
           config.json_config_.value("spdk_value_offset", (uint64_t)1000000);
     }
-    IOConfig io_config_index{
-        backend_type, queue_cnt_, index_db_path, index_offset};
+    BaseKVConfig index_config = config;
+    BaseKVConfig value_config = config;
+    index_config.json_config_["file_path"] = index_db_path;
+    value_config.json_config_["file_path"] = value_db_path;
+    index_config.json_config_["page_id_offset"] = index_offset;
+    value_config.json_config_["page_id_offset"] = value_offset;
 
-    hash_table_ = new CCEH(io_config_index);
-    IOConfig io_config_value{
-        backend_type, queue_cnt_, value_db_path, value_offset};
-    value_io_backend = IOBackendFactory::create(io_config_value);
+    hash_table_ = new CCEH(index_config);
+    using IOF   = base::Factory<IOBackend, const BaseKVConfig&>;
+    value_io_backend.reset(IOF::NewInstance(io_backend_type, value_config));
     value_io_backend->init();
-
     LOG(INFO) << "After init value and  index io_backend ";
   }
 
   void Get(const uint64_t key, std::string& value, unsigned tid) override {
-    Value_t v = hash_table_->Get(key);
+    Value_t v;
+    hash_table_->Get(key, v, tid);
     if (v == NONE) {
       value = std::string();
       return;
@@ -126,7 +126,7 @@ public:
       value_io_backend->Unpin(page_id, buffer, true);
     }
     Key_t hash_key = key;
-    hash_table_->Insert(hash_key, PackPageValue(start_page_id, pages_needed));
+    hash_table_->Put(hash_key, PackPageValue(start_page_id, pages_needed), tid);
   }
 
   void BatchGet(base::ConstArray<uint64_t> keys,
@@ -141,8 +141,8 @@ public:
     for (size_t i = 0; i < size; i++) {
       auto k = keys[i];
       coros.push_back(std::make_unique<coroutine<void>::pull_type>(
-          [this, &vals, i, k](auto& yield) {
-            vals[i] = hash_table_->Get(yield, i, k);
+          [this, &vals, i, k, tid](auto& yield) {
+            hash_table_->Get(yield, i, k, vals[i], tid);
           }));
     }
     while (pending)
@@ -225,8 +225,8 @@ public:
     // Phase 3: CCEH index inserts with packed value
     for (int j = 0; j < n; j++) {
       Key_t hash_key = keys[j];
-      hash_table_->Insert(
-          hash_key, PackPageValue(start_page_ids[j], page_counts[j]));
+      hash_table_->Put(
+          hash_key, PackPageValue(start_page_ids[j], page_counts[j]), tid);
     }
   }
 

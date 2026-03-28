@@ -1,17 +1,15 @@
 #include "storage/dram/extendible_hash.h"
-#include <chrono>
 #include <gtest/gtest.h>
 #include <random>
 #include <thread>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
+
+BaseKVConfig config{0, {{"initial_capacity", 16}}};
 
 class ExtendibleHashTest : public ::testing::Test {
 protected:
-  void SetUp() override {
-    hash_table_ = new ExtendibleHash(16); // 初始容量为16
-  }
+  void SetUp() override { hash_table_ = new ExtendibleHash(config); }
 
   void TearDown() override { delete hash_table_; }
 
@@ -23,16 +21,18 @@ TEST_F(ExtendibleHashTest, BasicInsertAndGet) {
   Key_t key1     = 123;
   Value_t value1 = 456;
 
-  hash_table_->Insert(key1, value1);
-  Value_t retrieved = hash_table_->Get(key1);
+  hash_table_->Put(key1, value1, 0);
+  Value_t retrieved;
+  hash_table_->Get(key1, retrieved, 0);
 
   EXPECT_EQ(retrieved, value1);
 }
 
 // 测试不存在的键
 TEST_F(ExtendibleHashTest, GetNonExistentKey) {
-  Key_t key         = 999;
-  Value_t retrieved = hash_table_->Get(key);
+  Key_t key = 999;
+  Value_t retrieved;
+  hash_table_->Get(key, retrieved, 0);
 
   EXPECT_EQ(retrieved, NONE);
 }
@@ -43,10 +43,11 @@ TEST_F(ExtendibleHashTest, KeyOverwrite) {
   Value_t value1 = 200;
   Value_t value2 = 300;
 
-  hash_table_->Insert(key, value1);
-  hash_table_->Insert(key, value2);
+  hash_table_->Put(key, value1, 0);
+  hash_table_->Put(key, value2, 0);
 
-  Value_t retrieved = hash_table_->Get(key);
+  Value_t retrieved;
+  hash_table_->Get(key, retrieved, 0);
   EXPECT_EQ(retrieved, value2);
 }
 
@@ -62,33 +63,22 @@ TEST_F(ExtendibleHashTest, MultipleInsertAndGet) {
 
   // 插入数据
   for (const auto& pair : test_data) {
-    hash_table_->Insert(pair.first, pair.second);
+    hash_table_->Put(pair.first, pair.second, 0);
   }
 
   // 验证数据
   for (const auto& pair : test_data) {
-    Value_t retrieved = hash_table_->Get(pair.first);
+    Value_t retrieved;
+    hash_table_->Get(pair.first, retrieved, 0);
     EXPECT_EQ(retrieved, pair.second) << "Failed for key " << pair.first;
   }
-}
-
-// 测试InsertOnly方法
-TEST_F(ExtendibleHashTest, InsertOnly) {
-  Key_t key     = 50;
-  Value_t value = 100;
-
-  bool result = hash_table_->InsertOnly(key, value);
-  EXPECT_TRUE(result);
-
-  Value_t retrieved = hash_table_->Get(key);
-  EXPECT_EQ(retrieved, value);
 }
 
 // 测试容量和利用率
 TEST_F(ExtendibleHashTest, CapacityAndUtilization) {
   // 插入一些数据
   for (Key_t i = 1; i <= 10; i++) {
-    hash_table_->Insert(i, i * 2);
+    hash_table_->Put(i, i * 2, 0);
   }
 
   size_t capacity    = hash_table_->Capacity();
@@ -105,12 +95,13 @@ TEST_F(ExtendibleHashTest, DirectoryExpansion) {
 
   // 插入大量数据以触发扩容
   for (Key_t i = 1; i <= num_keys; i++) {
-    hash_table_->Insert(i, i);
+    hash_table_->Put(i, i, 0);
   }
 
   // 验证所有数据都能正确检索
   for (Key_t i = 1; i <= num_keys; i++) {
-    Value_t retrieved = hash_table_->Get(i);
+    Value_t retrieved;
+    hash_table_->Get(i, retrieved, 0);
     EXPECT_EQ(retrieved, i) << "Failed for key " << i;
   }
 }
@@ -129,7 +120,7 @@ TEST_F(ExtendibleHashTest, RandomData) {
     Key_t key     = key_dist(gen);
     Value_t value = value_dist(gen);
 
-    hash_table_->Insert(key, value);
+    hash_table_->Put(key, value, 0);
     inserted_data.emplace_back(key, value);
   }
 
@@ -140,7 +131,8 @@ TEST_F(ExtendibleHashTest, RandomData) {
   }
 
   for (const auto& pair : expected) {
-    Value_t retrieved = hash_table_->Get(pair.first);
+    Value_t retrieved;
+    hash_table_->Get(pair.first, retrieved, 0);
     EXPECT_EQ(retrieved, pair.second);
   }
 }
@@ -148,14 +140,17 @@ TEST_F(ExtendibleHashTest, RandomData) {
 // 边界测试 - 特殊键值
 TEST_F(ExtendibleHashTest, SpecialKeys) {
   // 测试0值
-  hash_table_->Insert(0, 42);
-  EXPECT_EQ(hash_table_->Get(0), 42);
+  hash_table_->Put(0, 42, 0);
+  Value_t retrieved;
+  hash_table_->Get(0, retrieved, 0);
+  EXPECT_EQ(retrieved, 42);
 
   // 测试最大值
   Key_t max_key     = UINT64_MAX - 10; // 避免使用INVALID和SENTINEL
   Value_t max_value = UINT64_MAX - 10;
-  hash_table_->Insert(max_key, max_value);
-  EXPECT_EQ(hash_table_->Get(max_key), max_value);
+  hash_table_->Put(max_key, max_value, 0);
+  hash_table_->Get(max_key, retrieved, 0);
+  EXPECT_EQ(retrieved, max_value);
 }
 
 // 并发测试
@@ -171,7 +166,7 @@ TEST_F(ExtendibleHashTest, ConcurrentInsertAndGet) {
       for (int i = 0; i < operations_per_thread; i++) {
         Key_t key     = start_key + i;
         Value_t value = key * 2;
-        hash_table_->Insert(key, value);
+        hash_table_->Put(key, value, 0);
       }
     });
   }
@@ -187,46 +182,11 @@ TEST_F(ExtendibleHashTest, ConcurrentInsertAndGet) {
     for (int i = 0; i < operations_per_thread; i++) {
       Key_t key              = start_key + i;
       Value_t expected_value = key * 2;
-      Value_t retrieved      = hash_table_->Get(key);
+      Value_t retrieved;
+      hash_table_->Get(key, retrieved, 0);
       EXPECT_EQ(retrieved, expected_value) << "Thread " << t << ", key " << key;
     }
   }
-}
-
-// 性能测试
-TEST_F(ExtendibleHashTest, PerformanceTest) {
-  const int num_operations = 10000;
-  auto start_time          = std::chrono::high_resolution_clock::now();
-
-  // 插入操作
-  for (Key_t i = 1; i <= num_operations; i++) {
-    hash_table_->Insert(i, i);
-  }
-
-  auto insert_end_time = std::chrono::high_resolution_clock::now();
-
-  // 查找操作
-  for (Key_t i = 1; i <= num_operations; i++) {
-    Value_t value = hash_table_->Get(i);
-    EXPECT_EQ(value, i);
-  }
-
-  auto get_end_time = std::chrono::high_resolution_clock::now();
-
-  auto insert_duration = std::chrono::duration_cast<std::chrono::microseconds>(
-      insert_end_time - start_time);
-  auto get_duration = std::chrono::duration_cast<std::chrono::microseconds>(
-      get_end_time - insert_end_time);
-
-  std::cout << "Performance Results for " << num_operations << " operations:\n";
-  std::cout << "Insert time: " << insert_duration.count() << " microseconds\n";
-  std::cout << "Get time: " << get_duration.count() << " microseconds\n";
-  std::cout << "Insert throughput: "
-            << (num_operations * 1000000.0 / insert_duration.count())
-            << " ops/sec\n";
-  std::cout << "Get throughput: "
-            << (num_operations * 1000000.0 / get_duration.count())
-            << " ops/sec\n";
 }
 
 // 内存使用测试
@@ -238,7 +198,7 @@ TEST_F(ExtendibleHashTest, MemoryUsage) {
 
   // 插入数据
   for (Key_t i = 1; i <= num_keys; i++) {
-    hash_table_->Insert(i, i);
+    hash_table_->Put(i, i, 0);
   }
 
   size_t final_capacity = hash_table_->Capacity();
@@ -264,12 +224,13 @@ TEST_F(ExtendibleHashTest, HashCollisions) {
   const int num_keys = 256; // 选择一个可能导致哈希冲突的数量
 
   for (Key_t i = 0; i < num_keys; i++) {
-    hash_table_->Insert(i, i * 3);
+    hash_table_->Put(i, i * 3, 0);
   }
 
   // 验证所有键都能正确检索
   for (Key_t i = 0; i < num_keys; i++) {
-    Value_t retrieved = hash_table_->Get(i);
+    Value_t retrieved;
+    hash_table_->Get(i, retrieved, 0);
     EXPECT_EQ(retrieved, i * 3) << "Failed for key " << i;
   }
 }

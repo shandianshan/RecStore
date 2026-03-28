@@ -3,6 +3,8 @@
 #include "io_backend.h"
 #include <fcntl.h>
 #include <liburing.h>
+#include "base/factory.h"
+#include "storage/kv_engine/base_kv.h"
 
 class IoUringBackend : public IOBackend {
 private:
@@ -111,8 +113,9 @@ private:
   }
 
 public:
-  IoUringBackend(IOConfig& config)
-      : IOBackend(config), file_path(config.file_path), fd(-1) {}
+  IoUringBackend(const BaseKVConfig& config) : IOBackend(config), fd(-1) {
+    file_path = config.json_config_.at("file_path").get<std::string>();
+  }
   ~IoUringBackend() {
     if (fd >= 0) {
       close(fd);
@@ -255,3 +258,5 @@ public:
     }
   }
 };
+
+FACTORY_REGISTER(IOBackend, IOURING, IoUringBackend, const BaseKVConfig&);

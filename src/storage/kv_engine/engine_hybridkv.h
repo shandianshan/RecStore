@@ -2,15 +2,10 @@
 
 #include <shared_mutex>
 #include <string>
-#include <unordered_map>
-
-#include "../dram/extendible_hash.h"
 #include "base/factory.h"
 #include "base_kv.h"
 #include "memory/persist_malloc.h"
 #include "src/storage/hybrid/value.h"
-#include "storage/dram/extendible_hash.h"
-#include "storage/ssd/ssd_extendible_hash.h"
 #include "storage/hybrid/index.h"
 class KVEngineHybrid : public BaseKV {
   static constexpr int kKVEngineValidFileSize = 123;
@@ -23,7 +18,7 @@ public:
              config.json_config_.at("path").get<std::string>() + "/ssdvalue",
              config.json_config_.at("ssdcapacity").get<size_t>(),
              [&] {
-               IndexConfig ic;
+               BaseKVConfig ic;
                ic.json_config_ = config.json_config_;
                return ic;
              }()) {}
@@ -46,7 +41,7 @@ public:
 
   void BatchGet(base::ConstArray<uint64_t> keys,
                 std::vector<base::ConstArray<float>>* values,
-                unsigned tid) {
+                unsigned tid) override {
     std::unique_lock<std::shared_mutex> _(lock_);
     values->clear();
     values->reserve(keys.Size());
@@ -92,10 +87,7 @@ private:
   ValueManager valm;
   mutable std::shared_mutex lock_;
   std::vector<std::string> storage_;
-
-  uint64_t counter = 0;
   std::string dict_pool_name_;
-  size_t dict_pool_size_;
 };
 
 FACTORY_REGISTER(BaseKV, KVEngineHybrid, KVEngineHybrid, const BaseKVConfig&);

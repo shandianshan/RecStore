@@ -6,14 +6,9 @@
 #include <mutex>
 #include <random>
 #include <string>
-#include <thread>
-#include <unordered_map>
-#include <vector>
-
 #include "base/json.h"
 #include "memory/shm_file.h"
 #include "storage/kv_engine/engine_extendible_hash.h"
-
 #include "storage/kv_engine/engine_factory.h"
 #include "storage/kv_engine/engine_selector.h"
 
@@ -37,6 +32,7 @@ protected:
         {"value_size", 128},
         {"value_type", "SSD"},
         {"index_type", "DRAM"},
+        {"initial_capacity", 16},
         {"value_memory_management", "R2ShmMalloc"} // R2ShmMalloc
     };
 

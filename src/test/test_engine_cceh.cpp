@@ -20,8 +20,10 @@ protected:
         {"path", test_dir_},
         {"capacity", 100000},
         {"value_size", 128},
-        {"type", "IOURING"},
-        {"queue_size", 512}};
+        {"io_backend_type", "IOURING"},
+        {"queue_cnt", 512},
+        {"page_id_offset", 0},
+        {"file_path", test_dir_ + "/cceh.db"}};
     kv_engine_ = std::make_unique<KVEngineCCEH>(config_);
   }
 

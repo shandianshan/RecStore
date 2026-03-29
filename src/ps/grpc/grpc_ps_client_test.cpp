@@ -24,7 +24,7 @@ static bool check_eq_2d(std::vector<std::vector<float>>& a,
                         const std::vector<std::vector<float>>& b) {
   a.resize(b.size());
   for (size_t i = 0; i < b.size(); ++i) {
-      a[i].resize(b[i].size());
+    a[i].resize(b[i].size());
   }
   if (a.size() != b.size())
     return false;
@@ -55,15 +55,12 @@ void TestFactoryClient() {
   std::mt19937 gen(rd()); // Standard mersenne_twister_engine seeded with rd()
   std::uniform_int_distribution<> distrib(1, 200LL * 1e6);
 
-
   auto grpc_client = dynamic_cast<GRPCParameterClient*>(client.get());
   if (grpc_client) {
-
     std::vector<uint64_t> keys = {1, 2, 3};
     std::vector<std::vector<float>> emptyvalues(keys.size());
     std::vector<std::vector<float>> rightvalues = {{1}, {2, 2}, {3, 3, 3}};
     std::vector<std::vector<float>> values;
-
 
     // insert something
     grpc_client->PutParameter(keys, rightvalues);

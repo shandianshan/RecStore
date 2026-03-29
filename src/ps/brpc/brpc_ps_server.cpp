@@ -317,13 +317,11 @@ void BRPCParameterServiceImpl::Command(
       arg2.push_back(each);
     }
     cache_ps_->Initialize(arg1, arg2);
-  } else if (request->command() ==
-             recstoreps_brpc::PSCommand::LOAD_FAKE_DATA) {
+  } else if (request->command() == recstoreps_brpc::PSCommand::LOAD_FAKE_DATA) {
     if (request->arg1_size() != 1 ||
         static_cast<size_t>(request->arg1(0).size()) != sizeof(int64_t)) {
       LOG(ERROR) << "LOAD_FAKE_DATA: arg1 must be one " << sizeof(int64_t)
                  << "-byte int64_t (requested reply payload size)";
-
     }
     int64_t payload_bytes = 0;
     std::memcpy(&payload_bytes, request->arg1(0).data(), sizeof(int64_t));
@@ -338,8 +336,7 @@ void BRPCParameterServiceImpl::Command(
     }
     std::string fake(static_cast<size_t>(payload_bytes), '\xab');
     response->set_reply(std::move(fake));
-  } else if (request->command() ==
-             recstoreps_brpc::PSCommand::DUMP_FAKE_DATA) {
+  } else if (request->command() == recstoreps_brpc::PSCommand::DUMP_FAKE_DATA) {
     if (request->arg1_size() != 1 ||
         static_cast<size_t>(request->arg1(0).size()) != sizeof(int64_t)) {
       LOG(ERROR) << "DUMP_FAKE_DATA: arg1 must be one " << sizeof(int64_t)
@@ -351,13 +348,11 @@ void BRPCParameterServiceImpl::Command(
       LOG(ERROR) << "DUMP_FAKE_DATA: n must be positive";
     }
     if (n % static_cast<int64_t>(sizeof(float)) != 0) {
-      LOG(ERROR) << "DUMP_FAKE_DATA: n must be a multiple of "
-                 << sizeof(float);
+      LOG(ERROR) << "DUMP_FAKE_DATA: n must be a multiple of " << sizeof(float);
     }
     constexpr int64_t kMaxDumpBytes = 64 * 1024 * 1024;
     if (n > kMaxDumpBytes) {
       LOG(ERROR) << "DUMP_FAKE_DATA: n exceeds cap " << kMaxDumpBytes;
-
     }
     response->set_reply("ok");
   } else {

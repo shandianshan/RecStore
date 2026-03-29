@@ -130,7 +130,7 @@ public:
   ~GRPCParameterClient() {}
 
   // 实现 BasePSClient 的纯虚函数
-  virtual int 
+  virtual int
   GetParameter(const base::ConstArray<uint64_t>& keys, float* values) override;
 
   int AsyncGetParameter(const base::ConstArray<uint64_t>& keys,

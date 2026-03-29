@@ -31,11 +31,11 @@ check_eq_1d(const std::vector<float>& a, const std::vector<float>& b) {
   return true;
 }
 
-static bool check_eq_2d( std::vector<std::vector<float>>& a,
+static bool check_eq_2d(std::vector<std::vector<float>>& a,
                         const std::vector<std::vector<float>>& b) {
   a.resize(b.size());
   for (size_t i = 0; i < b.size(); ++i) {
-      a[i].resize(b[i].size());
+    a[i].resize(b[i].size());
   }
   if (a.size() != b.size())
     return false;

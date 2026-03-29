@@ -28,10 +28,9 @@ check_eq_1d(const std::vector<float>& a, const std::vector<float>& b) {
 
 static bool check_eq_2d(std::vector<std::vector<float>>& a,
                         const std::vector<std::vector<float>>& b) {
-
   a.resize(b.size());
   for (size_t i = 0; i < b.size(); ++i) {
-      a[i].resize(b[i].size());
+    a[i].resize(b[i].size());
   }
   if (a.size() != b.size())
     return false;
@@ -115,7 +114,7 @@ void TestFactoryClient() {
     std::cout << "pass second check" << std::endl;
 
     // clear all
-    client->ClearPS(); 
+    client->ClearPS();
     // read those
     client->GetParameter(keys, &values);
     CHECK(check_eq_2d(values, emptyvalues));
@@ -126,7 +125,6 @@ void TestFactoryClient() {
     std::cout << "dump fake data" << std::endl;
     client->DumpFakeData(100);
     std::cout << "dump fake data done" << std::endl;
-
 
     std::cout << "All distributed PS operations passed!" << std::endl;
   } catch (const std::exception& e) {

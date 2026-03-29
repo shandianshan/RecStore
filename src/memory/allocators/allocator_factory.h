@@ -38,7 +38,8 @@ inline std::string AllocatorTypeFromImpl(const std::string& impl_name) {
   throw std::invalid_argument("unknown allocator impl: " + impl_name);
 }
 
-inline std::string LegacyImplFromAllocatorType(const std::string& allocator_type) {
+inline std::string
+LegacyImplFromAllocatorType(const std::string& allocator_type) {
   const std::string t = Upper(allocator_type);
   if (t == "PERSIST_LOOP_SLAB")
     return "PersistLoopShmMalloc";
@@ -47,11 +48,10 @@ inline std::string LegacyImplFromAllocatorType(const std::string& allocator_type
   throw std::invalid_argument("unknown allocator_type: " + allocator_type);
 }
 
-inline void NormalizeAllocatorConfig(json& j,
-                                     const std::string& impl_key =
-                                         "value_memory_management",
-                                     const std::string& type_key =
-                                         "allocator_type") {
+inline void NormalizeAllocatorConfig(
+    json& j,
+    const std::string& impl_key = "value_memory_management",
+    const std::string& type_key = "allocator_type") {
   const bool has_impl = j.contains(impl_key);
   const bool has_type = j.contains(type_key);
 
@@ -70,16 +70,16 @@ inline void NormalizeAllocatorConfig(json& j,
   }
 
   if (has_type) {
-    const std::string type = AllocatorTypeFromImpl(
-        j.at(type_key).get<std::string>());
+    const std::string type =
+        AllocatorTypeFromImpl(j.at(type_key).get<std::string>());
     j[type_key] = type;
     j[impl_key] = LegacyImplFromAllocatorType(type);
     return;
   }
 
   if (has_impl) {
-    const std::string type = AllocatorTypeFromImpl(
-        j.at(impl_key).get<std::string>());
+    const std::string type =
+        AllocatorTypeFromImpl(j.at(impl_key).get<std::string>());
     j[type_key] = type;
     j[impl_key] = LegacyImplFromAllocatorType(type);
     return;
@@ -89,11 +89,10 @@ inline void NormalizeAllocatorConfig(json& j,
   j[impl_key] = "PersistLoopShmMalloc";
 }
 
-inline std::string ResolveAllocatorImpl(const json& j,
-                                        const std::string& impl_key =
-                                            "value_memory_management",
-                                        const std::string& type_key =
-                                            "allocator_type") {
+inline std::string
+ResolveAllocatorImpl(const json& j,
+                     const std::string& impl_key = "value_memory_management",
+                     const std::string& type_key = "allocator_type") {
   json copy = j;
   NormalizeAllocatorConfig(copy, impl_key, type_key);
   return ImplFromAllocatorType(copy.at(type_key).get<std::string>());

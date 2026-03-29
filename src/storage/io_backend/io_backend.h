@@ -28,10 +28,9 @@ public:
       LOG(WARNING) << "IOBackend config missing 'page_id_offset'";
     if (!config.json_config_.contains("queue_cnt"))
       LOG(WARNING) << "IOBackend config missing 'queue_cnt'";
-    next_page_id.store(
-        config.json_config_.value("page_id_offset", (PageID_t)1),
-        std::memory_order_relaxed);
-    queue_cnt    = config.json_config_.value("queue_cnt", 512);
+    next_page_id.store(config.json_config_.value("page_id_offset", (PageID_t)1),
+                       std::memory_order_relaxed);
+    queue_cnt = config.json_config_.value("queue_cnt", 512);
   }
   virtual ~IOBackend() {}
   virtual void init() = 0;
@@ -122,7 +121,7 @@ public:
 protected:
   std::atomic<PageID_t> next_page_id{1};
   char* empty_page = nullptr;
-  int queue_cnt = 512;
+  int queue_cnt    = 512;
 
   virtual void ReadPageAsync(coroutine<void>::push_type& sink,
                              uint64_t index,

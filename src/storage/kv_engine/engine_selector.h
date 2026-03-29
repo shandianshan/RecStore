@@ -69,10 +69,11 @@ inline EngineResolved ResolveEngine(BaseKVConfig cfg) {
   j["mode"] = mode;
 
   if (mode_explicit) {
-    const bool static_ok = ((idx == "DRAM" && (val == "DRAM" || val == "SSD")) ||
-                            (idx == "SSD" && val == "SSD"));
-    const bool dynamic_ok = ((idx == "DRAM" || idx == "SSD") &&
-                             val == "HYBRID");
+    const bool static_ok =
+        ((idx == "DRAM" && (val == "DRAM" || val == "SSD")) ||
+         (idx == "SSD" && val == "SSD"));
+    const bool dynamic_ok =
+        ((idx == "DRAM" || idx == "SSD") && val == "HYBRID");
     if (mode == "STATIC" && !static_ok) {
       throw std::invalid_argument(
           "STATIC mode supports only: (DRAM,DRAM), (DRAM,SSD), (SSD,SSD)");
@@ -87,11 +88,12 @@ inline EngineResolved ResolveEngine(BaseKVConfig cfg) {
   if (val == "HYBRID") {
     engine = "KVEngineHybrid";
     if (idx != "DRAM" && idx != "SSD")
-      throw std::invalid_argument("HYBRID value currently supports DRAM/SSD index");
+      throw std::invalid_argument(
+          "HYBRID value currently supports DRAM/SSD index");
     // Hybrid 需要 DRAM/SSD 双层容量
     if (!j.contains("shmcapacity") || !j.contains("ssdcapacity")) {
-      throw std::invalid_argument(
-          "HYBRID requires DRAM_SIZE/SSD_SIZE (or legacy shmcapacity/ssdcapacity)");
+      throw std::invalid_argument("HYBRID requires DRAM_SIZE/SSD_SIZE (or "
+                                  "legacy shmcapacity/ssdcapacity)");
     }
     j["DRAM_SIZE"] = j.at("shmcapacity");
     j["SSD_SIZE"]  = j.at("ssdcapacity");
@@ -164,8 +166,8 @@ inline EngineResolved ResolveEngine(BaseKVConfig cfg) {
     throw std::invalid_argument("value_layout must be FIXED or VARIABLE");
   }
   if (value_layout == "VARIABLE" && val != "HYBRID") {
-    throw std::invalid_argument(
-        "VARIABLE value_layout is only supported by ValueManager (HYBRID mode)");
+    throw std::invalid_argument("VARIABLE value_layout is only supported by "
+                                "ValueManager (HYBRID mode)");
   }
   j["value_layout"]          = value_layout;
   j["variable_value_enable"] = (value_layout == "VARIABLE");

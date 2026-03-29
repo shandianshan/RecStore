@@ -98,10 +98,10 @@ public:
       ssd_cfg["value_memory_management"] =
           index_config.json_config_.at("ssd_value_memory_management");
 
-    shm_manage =
-        base::allocators::CreateAllocator(dram_cfg, shm_file_path, shm_capacity, "DRAM");
-    ssd_manage =
-        base::allocators::CreateAllocator(ssd_cfg, ssd_file_path, ssd_capacity, "SSD");
+    shm_manage = base::allocators::CreateAllocator(
+        dram_cfg, shm_file_path, shm_capacity, "DRAM");
+    ssd_manage = base::allocators::CreateAllocator(
+        ssd_cfg, ssd_file_path, ssd_capacity, "SSD");
     if (!shm_manage || !ssd_manage)
       throw std::runtime_error("failed to initialize hybrid value allocators");
 

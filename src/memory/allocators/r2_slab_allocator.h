@@ -145,10 +145,6 @@ FACTORY_REGISTER(MallocApi,
                  const std::string&,
                  int64,
                  const std::string&);
-FACTORY_REGISTER(MallocApi,
-                 R2_SLAB,
-                 R2alloc,
-                 const std::string&,
-                 int64,
-                 const std::string&);
+FACTORY_REGISTER(
+    MallocApi, R2_SLAB, R2alloc, const std::string&, int64, const std::string&);
 } // namespace base

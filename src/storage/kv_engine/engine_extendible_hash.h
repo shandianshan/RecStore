@@ -35,8 +35,8 @@ public:
     uint64_t value_budget_bytes = 0;
     if (value_medium == "DRAM" && config.json_config_.contains("DRAM_SIZE")) {
       value_budget_bytes = config.json_config_.at("DRAM_SIZE").get<uint64_t>();
-    } else if (
-        value_medium == "SSD" && config.json_config_.contains("SSD_SIZE")) {
+    } else if (value_medium == "SSD" &&
+               config.json_config_.contains("SSD_SIZE")) {
       value_budget_bytes = config.json_config_.at("SSD_SIZE").get<uint64_t>();
     }
     if (value_budget_bytes == 0) {

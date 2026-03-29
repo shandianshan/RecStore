@@ -89,7 +89,8 @@ protected:
       cfg_.json_config_["io_backend_type"] = "IOURING";
       cfg_.json_config_["queue_cnt"]       = 512;
       cfg_.json_config_["page_id_offset"]  = 0;
-      // Needed when ValueManager instantiates SSD index directly (HYBRID value).
+      // Needed when ValueManager instantiates SSD index directly (HYBRID
+      // value).
       cfg_.json_config_["file_path"] = test_dir_ + "/index_cceh.db";
     }
 

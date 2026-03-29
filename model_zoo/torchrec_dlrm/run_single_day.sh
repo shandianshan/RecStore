@@ -16,9 +16,9 @@ DEFAULT_PREFETCH_DEPTH=2
 DEFAULT_FUSE_EMB=true
 DEFAULT_FUSE_K=30
 DEFAULT_TRACE_FILE=""
+DEFAULT_EMBEDDING_STORAGE="hbm"
 
 DLRM_PATH="$(pwd)"
-VENV_BASH="${DLRM_PATH}/dlrm_venv/bin/activate"
 TORCHREC_SCRIPT="${DLRM_PATH}/tests/dlrm_main_torchrec_single.py"
 CUSTOM_SCRIPT="${DLRM_PATH}/tests/dlrm_main_single_day.py"
 
@@ -34,6 +34,18 @@ fuse_emb_tables=$DEFAULT_FUSE_EMB
 fuse_k=$DEFAULT_FUSE_K
 trace_file=$DEFAULT_TRACE_FILE
 allow_tf32=false
+embedding_storage=$DEFAULT_EMBEDDING_STORAGE
+gin_config=""
+gin_bindings=()
+
+if command -v python >/dev/null 2>&1; then
+    PYTHON_BIN="python"
+elif command -v python3 >/dev/null 2>&1; then
+    PYTHON_BIN="python3"
+else
+    echo "Error: Neither python nor python3 is available in PATH" >&2
+    exit 1
+fi
 
 show_help() {
     echo "DLRM Training Script with Performance Metrics"
@@ -48,6 +60,8 @@ show_help() {
     echo "  --batch-size SIZE           Batch size (default: $DEFAULT_BATCH_SIZE)"
     echo "  --learning-rate RATE        Learning rate (default: $DEFAULT_LEARNING_RATE)"
     echo "  --epochs COUNT              Number of epochs (default: $DEFAULT_EPOCHS)"
+    echo "  --gin-config PATH           Load gin launch config file"
+    echo "  --gin-binding EXPR          Override gin setting (repeatable)"
     echo ""
     echo "Mode Selection (choose one):"
     echo "  --torchrec                  Use TorchRec baseline (default: custom recstore)"
@@ -123,6 +137,26 @@ while [[ $# -gt 0 ]]; do
         --epochs)
             if [[ -n "$2" && "$2" != -* ]]; then
                 epochs="$2"
+                shift 2
+            else
+                echo "Error: Argument for $1 is missing" >&2
+                show_help
+                exit 1
+            fi
+            ;;
+        --gin-config)
+            if [[ -n "$2" && "$2" != -* ]]; then
+                gin_config="$2"
+                shift 2
+            else
+                echo "Error: Argument for $1 is missing" >&2
+                show_help
+                exit 1
+            fi
+            ;;
+        --gin-binding)
+            if [[ -n "$2" && "$2" != -* ]]; then
+                gin_bindings+=("$2")
                 shift 2
             else
                 echo "Error: Argument for $1 is missing" >&2
@@ -236,7 +270,10 @@ echo "Batch Size:               $batch_size"
 echo "Learning Rate:            $learning_rate"
 echo "Epochs:                   $epochs"
 echo "Script Path:              $script_to_run"
-echo "Env. Path:                $VENV_BASH"
+echo "Python:                   $(command -v \"$PYTHON_BIN\")"
+if [ -n "$gin_config" ]; then
+echo "Gin Config:               $gin_config"
+fi
 if [ "$mode" = "RecStore" ]; then
 echo "Enable Prefetch:         $enable_prefetch"
 echo "Prefetch Depth:          $prefetch_depth"
@@ -246,9 +283,10 @@ if [ -n "$trace_file" ]; then
 echo "Trace File:              $trace_file"
 fi
 fi
+if [ "$mode" = "TorchRec" ]; then
+echo "Embedding Storage:       $embedding_storage"
+fi
 echo "=========================================="
-
-# source ${VENV_BASH}
 
 if [[ ! -f "$script_to_run" ]]; then
     echo "Error: Script not found at $script_to_run" >&2
@@ -273,7 +311,7 @@ done
 echo "✓ All required data files found"
 
 if [ -f "$processed_dataset_path/day_0_labels.npy" ]; then
-    detected_size=$(python3 -c "import numpy as np; print(np.load('${processed_dataset_path}/day_0_labels.npy', mmap_mode='r').shape[0])")
+    detected_size=$($PYTHON_BIN -c "import numpy as np; print(np.load('${processed_dataset_path}/day_0_labels.npy', mmap_mode='r').shape[0])")
     if [ -n "$detected_size" ]; then
         echo "Auto-detected dataset size: $detected_size"
         dataset_size=$detected_size
@@ -290,6 +328,12 @@ extra_args=()
 if [ "$allow_tf32" = true ]; then
     extra_args+=(--allow_tf32)
 fi
+if [ -n "$gin_config" ]; then
+    extra_args+=(--gin_config "$gin_config")
+fi
+for gin_binding in "${gin_bindings[@]}"; do
+    extra_args+=(--gin_binding "$gin_binding")
+done
 
 if [ "$mode" = "RecStore" ]; then
     if [ "$enable_prefetch" = true ]; then
@@ -317,9 +361,9 @@ else
         extra_args+=(--trace_file "$trace_file")
     fi
 fi
-echo "Executing command: python -m torch.distributed.run --nnodes 1 --nproc_per_node 1 --rdzv_backend c10d --rdzv_endpoint localhost --rdzv_id run-$(date +%s) --role trainer $script_to_run --single_day_mode --in_memory_binary_criteo_path $processed_dataset_path --batch_size $batch_size --learning_rate $learning_rate --epochs $epochs --pin_memory --mmap_mode --embedding_dim 128 ${extra_args[@]} --adagrad"
+echo "Executing command: $PYTHON_BIN -m torch.distributed.run --nnodes 1 --nproc_per_node 1 --rdzv_backend c10d --rdzv_endpoint localhost --rdzv_id run-$(date +%s) --role trainer $script_to_run --single_day_mode --in_memory_binary_criteo_path $processed_dataset_path --batch_size $batch_size --learning_rate $learning_rate --epochs $epochs --pin_memory --mmap_mode --embedding_dim 128 ${extra_args[@]} --adagrad"
 
-python -m torch.distributed.run --nnodes 1 \
+$PYTHON_BIN -m torch.distributed.run --nnodes 1 \
     --nproc_per_node 1 \
     --rdzv_backend c10d \
     --rdzv_endpoint localhost \

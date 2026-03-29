@@ -9,35 +9,27 @@
 #include <folly/Likely.h>
 #include <glog/logging.h>
 #include <sys/user.h>
-#include <utility>
 #include <vector>
+#include "../hybrid/index.h"
 
-typedef uint64_t PageID_t;
-const PageID_t INVALID_PAGE = -1;
 using boost::coroutines2::coroutine;
 extern thread_local int pending;
 extern thread_local std::vector<std::unique_ptr<coroutine<void>::pull_type>>
     coros;
 
-enum class BackendType { SPDK, IOURING };
-
-struct IOConfig {
-  BackendType type;
-  int queue_cnt;
-  std::string file_path;
-  PageID_t page_id_offset =
-      0; // Starting LBA offset for SPDK raw device partitioning
-  IOConfig(BackendType t           = BackendType::SPDK,
-           int q                   = 512,
-           const std::string& path = "/tmp/test.db",
-           PageID_t offset         = 0)
-      : type(t), queue_cnt(q), file_path(path), page_id_offset(offset) {}
-};
+typedef uint64_t PageID_t;
+const PageID_t INVALID_PAGE = -1;
 
 class IOBackend {
 public:
-  IOBackend(IOConfig& config)
-      : next_page_id(config.page_id_offset), queue_cnt(config.queue_cnt) {}
+  IOBackend(const BaseKVConfig& config) {
+    if (!config.json_config_.contains("page_id_offset"))
+      LOG(WARNING) << "IOBackend config missing 'page_id_offset'";
+    if (!config.json_config_.contains("queue_cnt"))
+      LOG(WARNING) << "IOBackend config missing 'queue_cnt'";
+    next_page_id = config.json_config_.value("page_id_offset", next_page_id);
+    queue_cnt    = config.json_config_.value("queue_cnt", queue_cnt);
+  }
   virtual ~IOBackend() {}
   virtual void init() = 0;
 

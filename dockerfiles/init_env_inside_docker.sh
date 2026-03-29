@@ -4,6 +4,7 @@ SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 cd "$SCRIPT_DIR"
 set -x
 set -e
+git config --global --add safe.directory '*'
 
 USER="$(whoami)"
 PROJECT_PATH="$(cd .. && pwd)"
@@ -25,7 +26,7 @@ else
 fi
 export MAKEFLAGS="${MAKE_OPTS}"
 
-TORCH_VERSION="2.5.1"
+TORCH_VERSION="2.7.1"
 CUDA_VERSION="cu118"
 LIBTORCH_VARIANT="${LIBTORCH_VARIANT:-${CUDA_VERSION}}"  # default to CUDA variant (e.g., cu118); set to cpu to force CPU libtorch
 
@@ -154,15 +155,12 @@ step_spdk() {
 # "
 
 step_torch() {
-    mkdir -p ${PROJECT_PATH}/binary
-    cd ${PROJECT_PATH}/binary
-    ################################################################################
-    #     Manually compile torch from source, specifically, enable the CXX11 ABI.
-    #     (binary/pytorch/dist/torch-2.5.0a0+gita8d6afb-cp310-cp310-linux_x86_64.whl)
-    #     TODO: Manually compile and install torch commands or share wheel files.
-    ################################################################################
-    # pip3 install -i https://pypi.tuna.tsinghua.edu.cn/simple torch-2.5.0a0+git*.whl
-    # pip install torch==${TORCH_VERSION} --index-url https://download.pytorch.org/whl/cu118
+    if [ "${CI:-}" = "1" ] || [ "${CI:-}" = "true" ] || [ "${GITHUB_ACTIONS:-}" = "true" ] || [ -n "${GITLAB_CI:-}" ] || [ -n "${JENKINS_URL:-}" ] || [ -n "${BUILD_BUILDID:-}" ]; then
+        echo "Skipping torch install because CI environment detected"
+        return 0
+    fi
+
+    pip3 install torch==${TORCH_VERSION} --index-url https://download.pytorch.org/whl/${CUDA_VERSION}
 }
 
 step_arrow() {

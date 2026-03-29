@@ -1,14 +1,14 @@
 #pragma once
 
-#include "../dram/pair.h"
-#include "io_backend.h"
-#include "storage/dram/pair.h"
+#include "../io_backend/io_backend.h"
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
 #include <shared_mutex>
 #include <vector>
+#include "base/factory.h"
+#include "../hybrid/index.h"
 
 class CCEH;
 struct Directory;
@@ -98,20 +98,29 @@ struct DirectoryHeader {
   }
 };
 
-class CCEH {
+class CCEH : public Index {
 public:
-  CCEH(IOConfig& config);
+  CCEH(const BaseKVConfig& config);
 
-  void Insert(coroutine<void>::push_type& sink, int index, Key_t&, Value_t);
-  void Insert(Key_t&, Value_t);
-  bool Delete(Key_t&);
-  Value_t Get(coroutine<void>::push_type& sink, int index, const Key_t&);
-  Value_t Get(const Key_t&);
-  Value_t FindAnyway(const Key_t&);
-
-  double Utilization();
-  size_t Capacity();
-  void Recovery();
+  void Put(coroutine<void>::push_type& sink,
+           int index,
+           Key_t,
+           Value_t,
+           unsigned tid) override;
+  void Put(Key_t, Value_t, unsigned tid) override;
+  bool Delete(Key_t&) override;
+  void Get(coroutine<void>::push_type& sink,
+           int index,
+           Key_t,
+           Value_t&,
+           unsigned tid) override;
+  void Get(Key_t, Value_t&, unsigned tid) override;
+  void BatchPut(base::ConstArray<Key_t> keys,
+                Value_t* pointers,
+                unsigned tid) override;
+  void BatchGet(base::ConstArray<Key_t> keys,
+                Value_t* pointers,
+                unsigned tid) override;
 
   bool crashed = true;
   std::unique_ptr<IOBackend> io_backend;
@@ -125,4 +134,8 @@ private:
   mutable std::mutex segment_locks_mutex;
   mutable std::unordered_map<PageID_t, std::unique_ptr<std::shared_mutex>>
       segment_locks;
+
+  Value_t FindAnyway(const Key_t&);
 };
+
+FACTORY_REGISTER(Index, SSD, CCEH, const BaseKVConfig&);

@@ -1,0 +1,246 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  schedule:
+    - cron: "0 15 * * 0"
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  prepare-release:
+    name: Prepare Release Metadata
+    runs-on: ubuntu-latest
+    outputs:
+      should_publish: ${{ steps.meta.outputs.should_publish }}
+      version: ${{ steps.meta.outputs.version }}
+      release_name: ${{ steps.meta.outputs.release_name }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute release metadata
+        id: meta
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            VERSION="${GITHUB_REF_NAME}"
+            RELEASE_NAME="${GITHUB_REF_NAME}"
+            PRERELEASE="false"
+            SHOULD_PUBLISH="true"
+          else
+            WEEKLY_VERSION="weekly-$(date -u +%Y%m%d)"
+            WEEKLY_NAME="Weekly Pre-release $(date -u +%Y-%m-%d)"
+            RECENT_COMMITS="$(git rev-list --count --since='7 days ago' HEAD)"
+            VERSION="${WEEKLY_VERSION}"
+            RELEASE_NAME="${WEEKLY_NAME}"
+            PRERELEASE="true"
+            SHOULD_PUBLISH="false"
+            if [ "${RECENT_COMMITS}" -gt 0 ]; then
+              SHOULD_PUBLISH="true"
+            fi
+          fi
+
+          echo "should_publish=${SHOULD_PUBLISH}" >> "${GITHUB_OUTPUT}"
+          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "release_name=${RELEASE_NAME}" >> "${GITHUB_OUTPUT}"
+          echo "prerelease=${PRERELEASE}" >> "${GITHUB_OUTPUT}"
+          echo "Resolved release metadata:"
+          echo "  should_publish=${SHOULD_PUBLISH}"
+          echo "  version=${VERSION}"
+          echo "  release_name=${RELEASE_NAME}"
+          echo "  prerelease=${PRERELEASE}"
+
+  build-and-release:
+    name: Build, Verify, and Publish Release
+    needs: prepare-release
+    if: needs.prepare-release.outputs.should_publish == 'true'
+    runs-on: ubuntu-latest
+    env:
+      TORCH_VERSION: "2.7.1"
+      RELEASE_VERSION: "${{ needs.prepare-release.outputs.version }}"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+
+      - name: Cache submodules git data
+        uses: actions/cache@v4
+        with:
+          path: .git/modules
+          key: submodules-${{ runner.os }}-${{ hashFiles('.gitmodules') }}
+          restore-keys: |
+            submodules-${{ runner.os }}-${{ hashFiles('.gitmodules') }}
+            submodules-${{ runner.os }}-
+
+      - name: Update submodules
+        run: |
+          set -euo pipefail
+          git submodule sync --recursive
+          git submodule update --init --recursive --jobs 4 --depth 0
+
+      - name: Free disk space
+        run: |
+          set -euxo pipefail
+          df -h
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache || true
+          sudo docker system prune -af || true
+          df -h
+
+      - name: Install host prerequisites
+        run: |
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          bash ci/env/init_host_prereqs.sh
+
+      - name: Init env inside docker
+        run: |
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          CI_THROTTLE_MAKE=1 LIBTORCH_VARIANT=cpu SKIP_SPDK=1 SKIP_HUGECTR=1 SKIP_LIBIBVERBS=1 \
+            bash dockerfiles/init_env_inside_docker.sh
+
+      - name: Install PyTorch wheel
+        run: |
+          set -euo pipefail
+          bash dockerfiles/build_torch_wheel.sh
+          WHL=$(ls -1 binary/torch-${TORCH_VERSION}*linux_x86_64.whl | head -n1)
+          python3 -m pip install --no-cache-dir "$WHL"
+
+      - name: Configure CMake
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          cd build
+          cmake -DENABLE_CUDA=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5 ..
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          cd build
+          make -j4
+
+      - name: Normalize recstore ops artifact name
+        run: |
+          set -euo pipefail
+          if [ -f build/lib/lib_recstore_ops.so ]; then
+            echo "build/lib/lib_recstore_ops.so already exists"
+          elif [ -f build/lib/_recstore_ops.so ]; then
+            cp -f build/lib/_recstore_ops.so build/lib/lib_recstore_ops.so
+          else
+            echo "Neither build/lib/lib_recstore_ops.so nor build/lib/_recstore_ops.so exists" >&2
+            exit 1
+          fi
+
+      - name: Pack release artifacts
+        run: |
+          set -euo pipefail
+          bash ci/pack/pack_artifact.sh "build/recstore-${RELEASE_VERSION}-linux-x86_64-ps_server.tar.gz" build/bin/ps_server
+          bash ci/pack/pack_artifact.sh "build/recstore-${RELEASE_VERSION}-linux-x86_64-recstore_ops.tar.gz" build/lib/lib_recstore_ops.so
+          bash ci/pack/pack_artifact.sh "build/recstore-${RELEASE_VERSION}-linux-x86_64-ycsb.tar.gz" build/bin/ycsb
+
+      - name: Extract release packages
+        run: |
+          set -euo pipefail
+          mkdir -p runner/extracted/ps-server runner/extracted/recstore-ops
+          tar -xzf "build/recstore-${RELEASE_VERSION}-linux-x86_64-ps_server.tar.gz" -C runner/extracted/ps-server
+          tar -xzf "build/recstore-${RELEASE_VERSION}-linux-x86_64-recstore_ops.tar.gz" -C runner/extracted/recstore-ops
+          echo "Extracted ps_server package:" && find runner/extracted/ps-server -maxdepth 3 -type f -print
+          echo "Extracted recstore ops package:" && find runner/extracted/recstore-ops -maxdepth 3 -type f -print
+
+      - name: Place RecStore OP into build/lib
+        run: |
+          set -euo pipefail
+          OPS_ROOT=runner/extracted/recstore-ops/package
+          mkdir -p "${OPS_ROOT}/lib"
+          if [ -f "${OPS_ROOT}/lib/lib_recstore_ops.so" ]; then
+            echo "lib_recstore_ops.so already present in package/lib; skipping copy"
+          elif [ -f "${OPS_ROOT}/lib/_recstore_ops.so" ]; then
+            cp "${OPS_ROOT}/lib/_recstore_ops.so" "${OPS_ROOT}/lib/lib_recstore_ops.so"
+          elif [ -f "${OPS_ROOT}/deps/lib/lib_recstore_ops.so" ]; then
+            cp "${OPS_ROOT}/deps/lib/lib_recstore_ops.so" "${OPS_ROOT}/lib/"
+          elif [ -f "${OPS_ROOT}/deps/lib/_recstore_ops.so" ]; then
+            cp "${OPS_ROOT}/deps/lib/_recstore_ops.so" "${OPS_ROOT}/lib/lib_recstore_ops.so"
+          else
+            echo "recstore ops library not found in release package" >&2
+            exit 1
+          fi
+          mkdir -p build/lib
+          cp -f "${OPS_ROOT}/lib/lib_recstore_ops.so" build/lib/
+          if [ -d "${OPS_ROOT}/deps/lib" ]; then
+            cp -f "${OPS_ROOT}/deps/lib/"*.so* build/lib/ || true
+            echo "Copied runtime deps (*.so*) to build/lib"
+          fi
+
+      - name: Install torchrec and dependencies
+        run: |
+          set -euo pipefail
+          bash dockerfiles/init_dlrm.sh --mirror=0
+
+      - name: Fix config to reduce resource usage
+        run: |
+          set -euo pipefail
+          bash ci/env/ci_fix_config.sh || true
+
+      - name: Run ps_server package
+        run: |
+          set -euo pipefail
+          export GLOG_logtostderr=1
+          export GLOG_v=1
+          PKG_ROOT=runner/extracted/ps-server/package
+          python3 ci/pack/runner.py "${PKG_ROOT}" bin/ps_server --ready-pattern "listening on" --timeout 180 --log runner/logs/recstore-release-ps-server.log --inject-rpath --keep-alive
+
+      - name: Run ci/test/test_op.sh
+        run: |
+          set -euo pipefail
+          bash ci/test/test_op.sh
+
+      - name: Stop ps_server
+        if: always()
+        run: |
+          set -euo pipefail
+          pkill -f ps_server || true
+
+      - name: Generate release notes
+        id: git-cliff
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: .github/cliff.toml
+          args: --verbose --unreleased --tag "${{ needs.prepare-release.outputs.version }}" --strip header
+        env:
+          OUTPUT: build/release-notes.md
+          GITHUB_REPO: ${{ github.repository }}
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "${{ needs.prepare-release.outputs.version }}"
+          name: "${{ needs.prepare-release.outputs.release_name }}"
+          body_path: build/release-notes.md
+          prerelease: "${{ needs.prepare-release.outputs.prerelease }}"
+          fail_on_unmatched_files: true
+          files: |
+            build/recstore-${{ needs.prepare-release.outputs.version }}-linux-x86_64-ps_server.tar.gz
+            build/recstore-${{ needs.prepare-release.outputs.version }}-linux-x86_64-recstore_ops.tar.gz
+            build/recstore-${{ needs.prepare-release.outputs.version }}-linux-x86_64-ycsb.tar.gz
+            binary/torch-${{ env.TORCH_VERSION }}*linux_x86_64.whl
+
+  skip-no-changes:
+    name: Skip Weekly Pre-release
+    needs: prepare-release
+    if: needs.prepare-release.outputs.should_publish != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Explain skip
+        run: |
+          echo "No commits were found in the last 7 days."
+          echo "Weekly pre-release build is skipped."

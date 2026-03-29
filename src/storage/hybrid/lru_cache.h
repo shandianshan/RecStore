@@ -19,7 +19,6 @@
 
 #include <atomic>
 #include <mutex>
-#include <new>
 #include <thread>
 #include <vector>
 #include <tbb/concurrent_hash_map.h>

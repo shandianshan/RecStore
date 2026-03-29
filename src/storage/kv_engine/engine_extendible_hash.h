@@ -1,20 +1,20 @@
 #pragma once
 
+#include <array>
+#include <mutex>
 #include <string>
+#include <shared_mutex>
 
 #include "../dram/extendible_hash.h"
+#include "storage/hybrid/index.h"
 #include "storage/nvm/pet_kv/shm_common.h"
 #include "base/factory.h"
 #include "base_kv.h"
-#include "memory/persist_malloc.h"
-
-#ifdef ENABLE_PERF_REPORT
-#  include <chrono>
-#  include "base/report/report_client.h"
-#endif
+#include "memory/memory_factory.h"
 
 class KVEngineExtendibleHash : public BaseKV {
   static constexpr int kKVEngineValidFileSize = 123;
+  static constexpr size_t kLockStripeNum      = 4096;
 
 public:
   KVEngineExtendibleHash(const BaseKVConfig& config) : BaseKV(config) {
@@ -40,8 +40,7 @@ public:
 
     value_size_ = config.json_config_.at("value_size").get<int>();
 
-    // 初始化extendible hash表
-    hash_table_ = new ExtendibleHash();
+    hash_table_ = new ExtendibleHash(config);
 
     std::string path = config.json_config_.at("path").get<std::string>();
 
@@ -60,11 +59,13 @@ public:
   }
 
   void Get(const uint64_t key, std::string& value, unsigned tid) override {
+    std::shared_lock<std::shared_mutex> lk(KeyMutex(key));
     base::PetKVData shmkv_data;
     // std::shared_lock<std::shared_mutex> _(lock_);
 
-    Key_t hash_key     = key;
-    Value_t read_value = hash_table_->Get(hash_key);
+    Key_t hash_key = key;
+    Value_t read_value;
+    hash_table_->Get(hash_key, read_value, tid);
 
     if (read_value == NONE) {
       value = std::string();
@@ -98,15 +99,18 @@ public:
     memcpy(sync_data, value.data(), value.size());
     _mm_mfence();
     asm volatile("" ::: "memory");
-    Key_t hash_key  = key;
-    Value_t old_val = hash_table_->Get(hash_key);
+
+    std::unique_lock<std::shared_mutex> lk(KeyMutex(key));
+    Key_t hash_key = key;
+    Value_t old_val;
+    hash_table_->Get(hash_key, old_val, tid);
     if (old_val != NONE) {
       base::PetKVData old_shm_data;
       old_shm_data.data_value = old_val;
       shm_malloc_->Free(
           shm_malloc_->GetMallocData(old_shm_data.shm_malloc_offset()));
     }
-    hash_table_->Insert(hash_key, shmkv_data.data_value);
+    hash_table_->Put(hash_key, shmkv_data.data_value, tid);
   }
 
   void BatchGet(base::ConstArray<uint64_t> keys,
@@ -119,9 +123,11 @@ public:
 #pragma omp parallel for num_threads(8) if (keys.Size() > 1024)
     for (int i = 0; i < (int)keys.Size(); ++i) {
       uint64_t k = keys[i];
+      std::shared_lock<std::shared_mutex> lk(KeyMutex(k));
       base::PetKVData shmkv_data;
-      Key_t hash_key     = k;
-      Value_t read_value = hash_table_->Get(hash_key);
+      Key_t hash_key = k;
+      Value_t read_value;
+      hash_table_->Get(hash_key, read_value, tid);
 
       if (read_value == NONE) {
         (*values)[i] = base::ConstArray<float>();
@@ -141,31 +147,6 @@ public:
             base::ConstArray<float>((float*)data, size / sizeof(float));
       }
     }
-
-#ifdef ENABLE_PERF_REPORT
-    auto end_time = std::chrono::high_resolution_clock::now();
-    double start_us =
-        std::chrono::duration_cast<std::chrono::microseconds>(
-            start_time.time_since_epoch())
-            .count();
-    auto duration =
-        std::chrono::duration_cast<std::chrono::microseconds>(
-            end_time - start_time)
-            .count();
-
-    std::string report_id = "engine_extendible_hash::BatchGet|" +
-                            std::to_string(static_cast<uint64_t>(start_us));
-
-    report("embread_stages",
-           report_id.c_str(),
-           "duration_us",
-           static_cast<double>(duration));
-
-    report("embread_stages",
-           report_id.c_str(),
-           "request_size",
-           static_cast<double>(keys.Size()));
-#endif
   }
 
   ~KVEngineExtendibleHash() {
@@ -176,25 +157,17 @@ public:
     }
   }
 
-  void clear() override {
-    if (hash_table_) {
-      hash_table_->clear();
-    }
-    if (shm_malloc_) {
-      shm_malloc_->Initialize();
-    }
+private:
+  std::shared_mutex& KeyMutex(uint64_t key) {
+    return key_mutexes_[key & (kLockStripeNum - 1)];
   }
 
-private:
   ExtendibleHash* hash_table_;
-  // std::shared_mutex lock_;
-
-  uint64_t counter = 0;
   std::string dict_pool_name_;
-  size_t dict_pool_size_;
   int value_size_;
   std::unique_ptr<base::MallocApi> shm_malloc_;
   base::ShmFile valid_shm_file_;
+  std::array<std::shared_mutex, kLockStripeNum> key_mutexes_;
 };
 
 FACTORY_REGISTER(BaseKV,

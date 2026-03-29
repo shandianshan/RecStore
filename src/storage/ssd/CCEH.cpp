@@ -10,7 +10,7 @@
 #include <unistd.h>
 #include <unordered_map>
 #include <vector>
-#include "io_backend_factory.h"
+#include "../io_backend/io_backend_register.h"
 
 thread_local int pending = 0;
 thread_local std::vector<std::unique_ptr<coroutine<void>::pull_type>> coros;
@@ -260,8 +260,13 @@ PageID_t* Segment::Split(IOBackend* io_backend) {
   return split;
 }
 
-CCEH::CCEH(IOConfig& config) {
-  io_backend = IOBackendFactory::create(config);
+CCEH::CCEH(const BaseKVConfig& config) : Index(config) {
+  using IOF = base::Factory<IOBackend, const BaseKVConfig&>;
+  if (!config.json_config_.contains("io_backend_type"))
+    LOG(FATAL) << "CCEH config missing 'io_backend_type'";
+  std::string io_backend_type =
+      config.json_config_.at("io_backend_type").get<std::string>();
+  io_backend.reset(IOF::NewInstance(io_backend_type, config));
   io_backend->init();
   initCCEH(2);
   crashed = false;
@@ -306,8 +311,11 @@ std::shared_mutex& CCEH::get_segment_lock(PageID_t page_id) const {
   return *it->second;
 }
 
-void CCEH::Insert(
-    coroutine<void>::push_type& sink, int index, Key_t& key, Value_t value) {
+void CCEH::Put(coroutine<void>::push_type& sink,
+               int index,
+               Key_t key,
+               Value_t value,
+               unsigned tid) {
   auto f_hash = hash_funcs[0](&key, sizeof(Key_t), f_seed);
   auto f_idx  = (f_hash % Segment::kNumGroups) * kNumPairPerCacheLine;
   ExponentialBackoff backoff;
@@ -570,7 +578,7 @@ void CCEH::Insert(
   }
 }
 
-void CCEH::Insert(Key_t& key, Value_t value) {
+void CCEH::Put(Key_t key, Value_t value, unsigned tid) {
   auto f_hash = hash_funcs[0](&key, sizeof(Key_t), f_seed);
   auto f_idx  = (f_hash % Segment::kNumGroups) * kNumPairPerCacheLine;
   ExponentialBackoff backoff;
@@ -803,8 +811,11 @@ void CCEH::Insert(Key_t& key, Value_t value) {
 
 bool CCEH::Delete(Key_t& key) { return false; }
 
-Value_t
-CCEH::Get(coroutine<void>::push_type& sink, int index, const Key_t& key) {
+void CCEH::Get(coroutine<void>::push_type& sink,
+               int index,
+               Key_t key,
+               Value_t& value,
+               unsigned tid) {
   auto f_hash = hash_funcs[0](&key, sizeof(Key_t), f_seed);
   auto f_idx  = (f_hash % Segment::kNumGroups) * kNumPairPerCacheLine;
   ExponentialBackoff backoff;
@@ -848,7 +859,8 @@ CCEH::Get(coroutine<void>::push_type& sink, int index, const Key_t& key) {
       if (target_ptr->bucket[loc].key == key) {
         Value_t v = target_ptr->bucket[loc].value;
         io_backend->Unpin(sink, index, target_page_id, target_ptr, false);
-        return v;
+        value = v;
+        return;
       }
     }
     auto s_hash = hash_funcs[2](&key, sizeof(Key_t), s_seed);
@@ -858,15 +870,17 @@ CCEH::Get(coroutine<void>::push_type& sink, int index, const Key_t& key) {
       if (target_ptr->bucket[loc].key == key) {
         Value_t v = target_ptr->bucket[loc].value;
         io_backend->Unpin(sink, index, target_page_id, target_ptr, false);
-        return v;
+        value = v;
+        return;
       }
     }
     io_backend->Unpin(sink, index, target_page_id, target_ptr, false);
-    return NONE;
+    value = NONE;
+    return;
   }
 }
 
-Value_t CCEH::Get(const Key_t& key) {
+void CCEH::Get(Key_t key, Value_t& value, unsigned tid) {
   auto f_hash = hash_funcs[0](&key, sizeof(Key_t), f_seed);
   auto f_idx  = (f_hash % Segment::kNumGroups) * kNumPairPerCacheLine;
   ExponentialBackoff backoff;
@@ -908,7 +922,8 @@ Value_t CCEH::Get(const Key_t& key) {
       if (target_ptr->bucket[loc].key == key) {
         Value_t v = target_ptr->bucket[loc].value;
         io_backend->Unpin(target_page_id, target_ptr, false);
-        return v;
+        value = v;
+        return;
       }
     }
     auto s_hash = hash_funcs[2](&key, sizeof(Key_t), s_seed);
@@ -918,10 +933,28 @@ Value_t CCEH::Get(const Key_t& key) {
       if (target_ptr->bucket[loc].key == key) {
         Value_t v = target_ptr->bucket[loc].value;
         io_backend->Unpin(target_page_id, target_ptr, false);
-        return v;
+        value = v;
+        return;
       }
     }
     io_backend->Unpin(target_page_id, target_ptr, false);
-    return NONE;
+    value = NONE;
+    return;
+  }
+}
+
+void CCEH::BatchPut(
+    base::ConstArray<Key_t> keys, Value_t* pointers, unsigned tid) {
+  size_t size = keys.Size();
+  for (size_t i = 0; i < size; ++i) {
+    Put(keys[i], pointers[i], tid);
+  }
+}
+
+void CCEH::BatchGet(
+    base::ConstArray<Key_t> keys, Value_t* pointers, unsigned tid) {
+  size_t size = keys.Size();
+  for (size_t i = 0; i < size; ++i) {
+    Get(keys[i], pointers[i], tid);
   }
 }

@@ -130,7 +130,7 @@ public:
   ~GRPCParameterClient() {}
 
   // 实现 BasePSClient 的纯虚函数
-  virtual int
+  virtual int 
   GetParameter(const base::ConstArray<uint64_t>& keys, float* values) override;
 
   int AsyncGetParameter(const base::ConstArray<uint64_t>& keys,
@@ -152,6 +152,10 @@ public:
   bool ClearPS();
 
   bool LoadFakeData(int64_t data);
+
+  // Write n bytes of random floats to storage at key 0. n must be a positive
+  // multiple of sizeof(float).
+  bool DumpFakeData(int64_t n);
 
   bool LoadCkpt(const std::vector<std::string>& model_config_path,
                 const std::vector<std::string>& emb_file_path);
